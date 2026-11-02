@@ -10,6 +10,9 @@ settings.register_profile("default", max_examples=400)
 settings.register_profile("deep", max_examples=20000)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default"))
 
+# For tests that run whole solves: 1/8 of the profile's examples (50 by default, 2500 deep).
+EXPENSIVE = settings(deadline=None, max_examples=max(25, settings().max_examples // 8))
+
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "reference: checks the compiled reference libraries themselves")

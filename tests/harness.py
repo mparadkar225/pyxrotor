@@ -13,16 +13,22 @@ def max_rel_error(got, want, floor: float = 1e-300) -> float:
     got, want = np.asarray(got, dtype=float), np.asarray(want, dtype=float)
     if got.shape != want.shape:
         raise AssertionError(f"shape mismatch: got {got.shape}, want {want.shape}")
-    return float(np.max(np.abs(got - want) / np.maximum(np.abs(want), floor), initial=0.0))
+    same = (got == want) | (np.isnan(got) & np.isnan(want))
+    with np.errstate(invalid="ignore", over="ignore", divide="ignore"):
+        rel = np.where(same, 0.0, np.abs(got - want) / np.maximum(np.abs(want), floor))
+    return float(np.max(np.where(np.isnan(rel), np.inf, rel), initial=0.0))
 
 
 def assert_close(got, want, rtol: float = RTOL, atol: float = 0.0, name: str = "value") -> None:
-    """Assert |got - want| <= atol + rtol*|want| elementwise, reporting the worst element."""
+    """Assert |got - want| <= atol + rtol*|want| elementwise, reporting the worst element.
+    Identical values (including equal infinities) and NaN vs NaN count as equal."""
     got, want = np.asarray(got, dtype=float), np.asarray(want, dtype=float)
     if got.shape != want.shape:
         raise AssertionError(f"{name}: shape mismatch: got {got.shape}, want {want.shape}")
-    err = np.abs(got - want)
-    bad = err > atol + rtol * np.abs(want)
+    same = (got == want) | (np.isnan(got) & np.isnan(want))
+    with np.errstate(invalid="ignore", over="ignore"):
+        err = np.where(same, 0.0, np.abs(got - want))
+        bad = ~same & ~(err <= atol + rtol * np.abs(want))
     if np.any(bad):
         k = np.unravel_index(np.argmax(np.where(bad, err, -1)), err.shape) if err.ndim else ()
         raise AssertionError(

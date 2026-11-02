@@ -55,6 +55,21 @@ def test_clcdcm(ref_module, alf, w, rey, fl, sec):
         same(getattr(got, name), value, name)
 
 
+NON_FINITE = st.sampled_from([math.nan, math.inf, -math.inf, 1e300, -1e300])
+
+
+@SETTINGS
+@given(alf=st.one_of(alphas, NON_FINITE), w=st.one_of(speeds, NON_FINITE), rey=reynolds,
+       fl=flight, sec=sections_params(), bad_field=st.sampled_from([None, "mcrit", "clmax", "clmin",
+       "a0", "dcl_stall", "cldmin"]), bad=NON_FINITE)
+def test_clcdcm_non_finite(ref_module, alf, w, rey, fl, sec, bad_field, bad):
+    """Diverged-iteration inputs: pins MAX/MIN NaN handling at every call site, and inf
+    arithmetic, inside the compiled CLCDCM itself (a standalone probe behaved differently)."""
+    if bad_field:
+        setattr(sec, bad_field, bad)
+    test_clcdcm.hypothesis.inner_test(ref_module, alf, w, rey, fl, sec)
+
+
 def test_clcdcm_physics():
     """Sanity checks independent of the Fortran: linear range, stall, Mach limiting."""
     sec = AeroSection()

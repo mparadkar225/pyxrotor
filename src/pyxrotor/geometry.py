@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from . import fmath as fm
 from .constants import PI
 
 
@@ -49,3 +50,27 @@ def setx(ii: int, xi0: float, xitip: float = 1.0, ixspac: int = 2) -> RadialGrid
         xv[i] = xp
     xv[ii] = xitip
     return RadialGrid(dt, t, xi, dxi, xv)
+
+
+def tinvrt(xx: float, xi0: float, xitip: float = 1.0, ixspac: int = 2) -> float:
+    """Port of FUNCTION TINVRT (xrotor.f): the spacing parameter t at which SETX's
+    stretching function gives r/R = xx (Newton, up to 40 iterations, |residual| <= 1e-5)."""
+    xx = float(xx)
+    tt = fm.atan2(xx, fm.sqrt(xitip * xitip - xx * xx))
+    for _ in range(40):
+        st = fm.sin(tt)
+        ct = fm.cos(tt)
+        if ixspac == 2:
+            # ---- usual sine stretching, adjusted for nonzero root radius
+            a, b = xitip * st, xi0 * ct
+            rez = a * a + b * b - xx * xx
+            drdt = 2.0 * (xitip * xitip - xi0 * xi0) * st * ct
+        else:
+            # ---- cosine stretching for more root resolution (also in SETX)
+            rez = 0.5 * (1.0 - fm.cos(2.0 * tt)) * (xitip - xi0) + xi0 - xx
+            drdt = (xitip - xi0) * fm.sin(2.0 * tt)
+        tt = tt - fm.div(rez, drdt)
+        if abs(rez) <= 1.0e-5:
+            break
+    # (else XROTOR prints 'TINVRT: Convergence failed')
+    return tt

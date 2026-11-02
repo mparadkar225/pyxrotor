@@ -9,11 +9,29 @@ used as a library and verified routine by routine against the original Fortran.
 | Area | Status |
 |---|---|
 | Reference harness (XROTOR 7.55 as a callable library, full COMMON-block access) | Done |
-| `SETX` radial grid | Ported, bit-identical to 7.55 |
-| Parametric section aero (`CLCDCM`, `GETCLCDCM`, `GETALF`, `SETIAERO`, `SORTAR`) | Ported, bit-identical to 7.55 |
-| OPER (operating-point solver, wake models, sweeps) | Next |
+| `State`: all 27 COMMON blocks, generated from XROTOR.INC | Done |
+| Start-up (`INIT`, `SETDEF`), `ATMO`, `ARBI` blade input | Ported, bit-identical |
+| Section aero (`CLCDCM`, `GETCLCDCM`, `GETALF`, `SETIAERO`, `SORTAR`) | Ported, bit-identical |
+| Induced velocity: graded momentum, potential (Goldstein), discrete vortex wake | Ported, bit-identical |
+| OPER solver (`TPQ`, `APINIT`, `APITER`, `APER`) and wake geometry | Ported, bit-identical |
+| OPER commands: `VELO`, `ANGL`, `ADVA`, `RPM`, `THRU`, `TORQ`, `POWE` (fix pitch or rpm), engine power line | Ported, bit-identical |
+| Sweeps (`ASEQ`, `RSEQ`, `BSEQ`, `VSEQ`; executed in xcasepl.f), case files | Next |
 | DESI (minimum-induced-loss design), MODI | To do |
-| BEND, NOIS, file formats | To do |
+| BEND, NOIS, restart files | To do |
+
+```python
+from pyxrotor import Rotor, AeroSection
+
+r = Rotor()                                   # XROTOR start-up state
+r.atmosphere(0.0)                             # km
+r.set_sections([AeroSection(xisect=0.0, cdmin=0.010), AeroSection(xisect=0.7, cdmin=0.008)])
+r.arbi(nblds=2, vel=50.0, tip_radius=1.64, hub_radius=0.33,
+       r_over_R=[0.25, 0.5, 0.75, 1.0], c_over_R=[0.14, 0.16, 0.14, 0.05],
+       beta_deg=[45.0, 30.0, 22.0, 17.0])
+r.velocity(40.0)
+r.solve_rpm(1200.0)                           # or solve_thrust(800.0, fix="rpm"), ...
+print(r.performance())                        # thrust, power, efficiency, CT, CP, ...
+```
 
 ## Quick start
 

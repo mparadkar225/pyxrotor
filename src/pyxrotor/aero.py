@@ -8,8 +8,8 @@ Ported routines:
     SORTAR     sort_sections() order sections by radius
 
 Every expression keeps the Fortran's operation order, so results match XROTOR 7.55 bit for
-bit; see CLAUDE.md before "simplifying" anything. Divisions that can meet a zero divisor use
-_div(), which returns the IEEE inf/NaN the Fortran produces instead of raising.
+bit; see CLAUDE.md before "simplifying" anything. Operations that can meet a zero divisor,
+overflow, or NaN use pyxrotor.fmath, which returns the IEEE inf/NaN the Fortran produces.
 
 Indexing: stations and sections are 0-based here. An IAERO value N in Fortran is N-1 in
 `iaero`; Fortran's "unset" value 0 (from INIT) is -1.
@@ -21,6 +21,9 @@ from dataclasses import dataclass, fields
 from typing import NamedTuple, Sequence
 
 import numpy as np
+
+from . import fmath as fm
+from .fmath import div as _div, pow as _pow   # names used throughout this module
 
 # Compressibility drag model constants (CLCDCM, "HHY 10/23/00")
 CDMFACTOR = 10.0
@@ -34,23 +37,6 @@ GETALF_NITER = 10
 GETALF_EPS = 1.0e-5
 
 
-def _div(a: float, b: float) -> float:
-    """a / b with IEEE semantics: x/0 is +-inf, 0/0 and nan/0 are nan."""
-    try:
-        return a / b
-    except ZeroDivisionError:
-        if a == 0.0 or a != a:
-            return math.nan
-        return math.copysign(math.inf, a) * math.copysign(1.0, b)
-
-
-def _pow(x: float, y: float) -> float:
-    """libm pow(x, y) for x >= 0, overflowing to inf as in Fortran instead of raising.
-    (A diverging GETALF iteration can drive (Mach - Mcrit_eff)**3 past the float range.)"""
-    try:
-        return math.pow(x, y)
-    except OverflowError:
-        return math.inf
 
 
 @dataclass
@@ -134,11 +120,11 @@ def clcdcm(alf: float, w: float, rey: float, vel: float, vso: float, sec: AeroSe
         mach_limited = True                      # 'CLFUNC: Local Mach number limited to 0.99'
         msq = 0.99
         msq_w = 0.0
-    pg = 1.0 / math.sqrt(1.0 - msq)
+    pg = 1.0 / fm.sqrt(1.0 - msq)
     pg_w = 0.5 * msq_w * (pg * pg * pg)
 
     # ---- Mach number and dependence on velocity
-    mach = math.sqrt(msq)
+    mach = fm.sqrt(msq)
     mach_w = 0.0
     if mach != 0.0:
         mach_w = 0.5 * msq_w / mach
@@ -150,15 +136,15 @@ def clcdcm(alf: float, w: float, rey: float, vel: float, vso: float, sec: AeroSe
 
     # --- Effective CLmax is limited by Mach effects
     dmstall = _pow(CDMSTALL / CDMFACTOR, 1.0 / MEXP)
-    clmaxm = max(0.0, (mcrit + dmstall - mach) / CLMFACTOR) + cldmin
-    clmax = min(clmax, clmaxm)
-    clminm = min(0.0, -(mcrit + dmstall - mach) / CLMFACTOR) + cldmin
-    clmin = max(clmin, clminm)
+    clmaxm = fm.fmax(0.0, (mcrit + dmstall - mach) / CLMFACTOR) + cldmin
+    clmax = fm.fmin(clmax, clmaxm)
+    clminm = fm.fmin(0.0, -(mcrit + dmstall - mach) / CLMFACTOR) + cldmin
+    clmin = fm.fmax(clmin, clminm)
 
     # --- CL limiter function (turns on after +-stall)
-    ecmax = math.exp(min(200.0, _div(cla - clmax, dcl_stall)))
-    ecmin = math.exp(min(200.0, _div(clmin - cla, dcl_stall)))
-    cllim = dcl_stall * math.log((1.0 + ecmax) / (1.0 + ecmin))
+    ecmax = fm.exp(fm.fmin(200.0, _div(cla - clmax, dcl_stall)))
+    ecmin = fm.exp(fm.fmin(200.0, _div(clmin - cla, dcl_stall)))
+    cllim = dcl_stall * fm.log((1.0 + ecmax) / (1.0 + ecmin))
     cllim_cla = ecmax / (1.0 + ecmax) + ecmin / (1.0 + ecmin)
 
     # --- Subtract a (nearly unity) fraction of the limited CL function

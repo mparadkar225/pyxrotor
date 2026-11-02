@@ -103,3 +103,98 @@ C
       CALL SETIAERO
       RETURN
       END ! REFARBI
+
+
+
+C=======================================================================
+C     OPER menu command handlers (xoper.f SUBROUTINE OPER), with the
+C     prompts replaced by arguments. Plotting calls are omitted; they
+C     do not change XROTOR state.
+C=======================================================================
+
+      SUBROUTINE REFATMO(ALTIN)
+C---- OPER/top-level ATMO r (xoper.f label 35, xrotor.f)
+      INCLUDE 'XROTOR.INC'
+      ALT = ALTIN
+      CALL ATMO(ALT,VSO,RHO,RMU)
+      RETURN
+      END
+
+
+      SUBROUTINE REFVELO(VELIN)
+C---- OPER VELO r (xoper.f label 38)
+      INCLUDE 'XROTOR.INC'
+      VELOLD = VEL
+      VEL = VELIN
+C--- Change CT,CQ,CP to give same thrust,torque,power
+      THR  = TTOT *(RHO*VELOLD**2*RAD**2)
+      TTOT = THR / (RHO*VEL**2*RAD**2)
+      TRQ  = QTOT *(RHO*VELOLD**2*RAD**3)
+      QTOT = TRQ / (RHO*VEL**2*RAD**3)
+      PWR  = PTOT *(RHO*VELOLD**3*RAD**2)
+      PTOT = PWR / (RHO*VEL**3*RAD**2)
+      CONV = .FALSE.
+      RETURN
+      END
+
+
+      SUBROUTINE REFANGL(DELB)
+C---- OPER ANGL r (xoper.f label 40)
+      INCLUDE 'XROTOR.INC'
+      DO I=1, II
+        BETA(I)  = BETA(I)  + DELB*PI/180.
+        BETA0(I) = BETA0(I) + DELB*PI/180.
+      ENDDO
+      CONV = .FALSE.
+      RETURN
+      END
+
+
+      SUBROUTINE REFADVA(ADVIN)
+C---- OPER ADVA r (xoper.f label 42)
+      INCLUDE 'XROTOR.INC'
+      ADV = ADVIN
+      CONV = .FALSE.
+      CALL APER(4,2,LOPRINI)
+      RETURN
+      END
+
+
+      SUBROUTINE REFRPM(RPM)
+C---- OPER RPM r (xoper.f label 45)
+      INCLUDE 'XROTOR.INC'
+      ADV = VEL / (RAD*RPM*PI/30.)
+      CONV = .FALSE.
+      CALL APER(4,2,LOPRINI)
+      RETURN
+      END
+
+
+      SUBROUTINE REFTPQ(ISPEC,SPEC,IFIX,RPMIN)
+C---- OPER THRU / TORQ / POWE (xoper.f labels 50, 60, 70)
+C     ISPEC 1,2,3 = thrust, torque, power; IFIX 1 = fix pitch (P),
+C     2 = fix rpm (R) at RPMIN (RPMIN <= 0: keep the current rpm)
+      INCLUDE 'XROTOR.INC'
+      IF(ISPEC.EQ.1) TSPEC = SPEC
+      IF(ISPEC.EQ.2) QSPEC = SPEC
+      IF(ISPEC.EQ.3) PSPEC = SPEC
+      RPM = VEL / (RAD*ADV*PI/30.0)
+      CONV = .FALSE.
+      IF(IFIX.EQ.1) CALL APER(ISPEC,2,LOPRINI)
+      IF(IFIX.EQ.2) THEN
+       IF(RPMIN.GT.0.0) RPM = RPMIN
+       ADV = VEL / (RAD*RPM*PI/30.0)
+       CALL APER(ISPEC,1,LOPRINI)
+      ENDIF
+C---- Check for valid blade angle change
+      IF(IFIX.NE.1) THEN
+       IF(.NOT.CONV) THEN
+C----- convergence failed: restore clobbered blade angles
+        DO I=1, II
+         BETA(I)  = BETA(I)  - DBETA
+         BETA0(I) = BETA0(I) - DBETA
+        ENDDO
+       ENDIF
+      ENDIF
+      RETURN
+      END
