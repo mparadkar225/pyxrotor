@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install compilers
+        run: sudo apt-get update && sudo apt-get install -y gfortran libx11-dev cmake
+
+      - name: Build reference libraries
+        run: reference/build.sh
+
+      - name: Install pyxrotor
+        run: pip install -e ".[test]"
+
+      - name: Test
+        run: pytest -v

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyxrotor"
+version = "0.0.1"
+description = "Python port of XROTOR 7.55 (Drela & Youngren), verified against the original Fortran"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+test = ["pytest>=7", "hypothesis>=6", "scipy"]   # scipy: needed by xrotor-python's wrapper
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "src", "tests"]
+addopts = "-ra"

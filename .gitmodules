@@ -1,0 +1,6 @@
+[submodule "reference/xrotor-7.55"]
+	path = reference/xrotor-7.55
+	url = https://github.com/mparadkar225/xrotor
+[submodule "reference/xrotor-python"]
+	path = reference/xrotor-python
+	url = https://github.com/DARcorporation/xrotor-python
