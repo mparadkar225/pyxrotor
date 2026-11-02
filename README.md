@@ -10,8 +10,8 @@ used as a library and verified routine by routine against the original Fortran.
 |---|---|
 | Reference harness (XROTOR 7.55 as a callable library, full COMMON-block access) | Done |
 | `SETX` radial grid | Ported, bit-identical to 7.55 |
-| Parametric section aero (`CLCDCM`, `GETCLCDCM`, `GETALF`) | Next |
-| OPER (operating-point solver, wake models, sweeps) | To do |
+| Parametric section aero (`CLCDCM`, `GETCLCDCM`, `GETALF`, `SETIAERO`, `SORTAR`) | Ported, bit-identical to 7.55 |
+| OPER (operating-point solver, wake models, sweeps) | Next |
 | DESI (minimum-induced-loss design), MODI | To do |
 | BEND, NOIS, file formats | To do |
 

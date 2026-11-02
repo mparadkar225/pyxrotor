@@ -9,7 +9,7 @@ from pyxrotor.geometry import setx
 pytestmark = pytest.mark.differential
 
 
-@settings(max_examples=300, deadline=None)
+@settings(deadline=None)
 @given(
     ii=st.integers(min_value=3, max_value=99),          # XV(II+1) must fit in XV(IX)
     xi0=st.floats(min_value=0.01, max_value=0.6),

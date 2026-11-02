@@ -1,6 +1,14 @@
+import os
+
 import pytest
+from hypothesis import settings
 
 from reference import ref755, refxp
+
+# HYPOTHESIS_PROFILE=deep for long bug hunts; the default keeps CI under a minute.
+settings.register_profile("default", max_examples=400)
+settings.register_profile("deep", max_examples=20000)
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default"))
 
 
 def pytest_configure(config):

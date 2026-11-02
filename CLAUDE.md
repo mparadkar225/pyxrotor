@@ -10,7 +10,11 @@ git submodule update --init      # reference sources
 reference/build.sh               # build both reference libraries (~1 min)
 pytest                           # everything
 pytest tests/differential -q     # just the port-vs-Fortran tests
+HYPOTHESIS_PROFILE=deep pytest tests/differential -W error::RuntimeWarning   # 20k cases/test, ~6 min
 ```
+
+Run the deep profile after porting or changing a routine; the default 400 cases have
+missed real mismatches (an overflow in a diverging GETALF only showed up on other seeds).
 
 ## Porting rules
 
@@ -30,6 +34,14 @@ pytest tests/differential -q     # just the port-vs-Fortran tests
    * Write `x**2` from Fortran as `x * x` (gfortran's form).
    * Keep loop order and accumulation order in iterative solvers; vectorize only where a
      differential test proves it changes nothing.
+   * Fortran evaluates `a*b*c` and `a/b*c` left to right; keep the same grouping.
+     `x**3` with an integer exponent is `(x*x)*x`; with a REAL exponent it is libm `pow`.
+   * Python raises where Fortran quietly produces inf/NaN: use `aero._div` for divisions
+     that can meet zero and `aero._pow` for powers that can overflow. Differential tests
+     deliberately drive iterations into divergence, so these paths do get exercised.
+   * Convert inputs to `float` at public entry points: NumPy scalars arriving from arrays
+     (e.g. `xi[i]`) silently change overflow and divide-by-zero behavior.
+   * Indices are 0-based in Python. Fortran IAERO = N is `iaero = N - 1`; "unset" (0) is -1.
 5. **Known 7.55 bugs are reproduced first, then fixed.** Port the faithful behavior behind
    a compatibility flag, prove it matches, then make the fix the default, with a test for each.
 6. **Keep Fortran names in comments** next to their Python equivalents
@@ -52,6 +64,11 @@ pytest tests/differential -q     # just the port-vs-Fortran tests
   it, so outer stations extrapolate past the last section (negative Cd). In a P-51D test this
   overstated design efficiency (85.3% vs 79.8%). ARBI and LOAD call SETIAERO and are fine.
   Fix: call SETIAERO after DESI.
+* **GETCLCDCM's fallback picks the wrong section.** When a station's IAERO is invalid (as
+  INIT leaves it, 0 everywhere, until SETIAERO runs), the recovery search exits with N at the
+  first section *outboard* of the station instead of the inner bounding one. Ported
+  faithfully and tested, including what it writes back to IAERO.
+* **GETALF starts every station from section 1's zero-lift angle**, not the station's own.
 * **DESI fails** (GETALF inversion, NaN wake) when the helical tip Mach number reaches about 1.
 * The generic compressibility model (dCD = K (M − Mcrit)^3, local Mach capped at 0.99) is
   very sensitive to Mcrit for transonic tips.
