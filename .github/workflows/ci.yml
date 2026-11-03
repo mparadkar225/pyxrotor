@@ -26,4 +26,9 @@ jobs:
         run: pip install -e ".[test]"
 
       - name: Test
-        run: pytest -v
+        # A Fortran STOP inside a reference call exits pytest with status 0 before it
+        # writes the report, so a missing report means the run was cut short
+        run: |
+          rm -f junit.xml
+          pytest -v --junitxml=junit.xml
+          test -s junit.xml || { echo "pytest exited inside a test (Fortran STOP?): run incomplete"; exit 1; }

@@ -82,9 +82,11 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
   output arguments can be read back. Python bool → LOGICAL, int → INTEGER*4, float → REAL*8.
   COMMON arrays can be passed as arguments directly: `ref.call("HELICO", ..., ref["GAM"], ...)`.
 * A Fortran `STOP` kills the Python process: run anything that might STOP in a subprocess.
-  STOP exits with status 0 and loses pytest's buffered output, so a truncated run used to
-  look like a pass; `tests/conftest.py` installs a C exit handler that makes it exit 13
-  with a message (`test_stop_guard.py`). Strategies must generate inputs the shims accept:
+  STOP exits with status 0 before pytest prints its summary or writes a report, so a
+  truncated run looks like a pass: a run without the final `N passed` line was cut short.
+  CI checks that `--junitxml` wrote its report (`test_stop_guard.py` pins the behavior; a
+  C exit handler calling back into Python segfaults after interpreter shutdown, so don't).
+  Strategies must generate inputs the shims accept:
   `blades()` once drew stations from `hub`, below REFARBI's XI0 = (hub*R)/R by an ulp.
 * Interactive routines (ASKR prompts) can't be called; transcribe them into
   `reference/shim/ref755_shim.f` statement for statement, with prompts turned into arguments,
