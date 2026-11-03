@@ -220,9 +220,9 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   model +0.023/+0.029); the model's dual is ~0.6° of pitch more loaded than the test while
   single matches, and figure 12 (front/rear CP) puts that mostly on the front rotor
   (+3-23% vs rear -1 to +13%). Slipstream contraction is negligible there: an
-  actuator-disk estimate () shrinks the
+  actuator-disk estimate (`validation/naca747/contraction_estimate.py`) shrinks the
   slipstream 0.1-1.5% at 0.16 R and changes the rear's power by < 0.15% (< 0.8% even fully
-  developed), because the tip-loss region carries little load. Digitizing: a crop whose lowest grid line isn't the axis shifts every
+  developed). Digitizing: a crop whose lowest grid line is not the axis shifts every
   value by one step; check CT·J/CP against the report's efficiency curves. Solid vs
   dashed lines: separate by connected-component length (`validation/naca747/digitizing`).
 * `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).

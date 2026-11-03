@@ -62,7 +62,7 @@ Over the attached-flow range (J where both CT and CP were digitized), model / me
   0.75–0.97 towards zero thrust (the rear is set lower); the model follows the same shape
   but up to 0.10 lower in the attached range, i.e. it underloads the rear relative to the
   front.
-* **Slipstream contraction is negligible at this spacing.** 
+* **Slipstream contraction is negligible at this spacing.** `contraction_estimate.py`
   scales the front's field to an actuator-disk contraction at the rear's distance: the
   slipstream radius shrinks 0.1–1.5% (most at take-off loading) and the rear's power
   changes by less than 0.15%. Even fully developed contraction (a widely spaced pair,
