@@ -43,6 +43,8 @@ class Fixes:
     #: GETCLCDCM's search for a missing section index picks the inner bounding section
     #: (as SETIAERO does), instead of the outer one or, past the last section, section 1
     section_fallback: bool = False
+    #: LOAD splines the slipstream profile it reads (7.55 leaves UADDR/VADDR stale)
+    slipstream_splines: bool = False
 
 
 class State:

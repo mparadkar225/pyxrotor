@@ -17,6 +17,7 @@ Modules (each a port of the named XROTOR routines, bit-identical to 7.55):
     cases      SETCAS, CASPLT (solves), SHOCAS, GETCAS, ADDC/CLRC/CASE
     restart    SAVE, LOAD
     nacelle    NACELL (NACE), SRCVEL
+    slipstream SAVVEL (VPUT), GETVEL (VGET)
     fortio     gfortran formatted output and list-directed input, GETFLT
     oper       TPQ, APINIT, APITER, APER
     induced    VCALC, GRADMO, HELICO, VRTXCO, VORSEGVEL

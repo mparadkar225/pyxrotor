@@ -911,3 +911,66 @@ C
    95 CONTINUE
       RETURN
       END ! REFNACELL
+
+
+
+      SUBROUTINE REFSAVVEL
+C---- top-level VPUT (SAVVEL) to the new file FNAME
+      INCLUDE 'XROTOR.INC'
+      CHARACTER*80 F
+      F = FNAME
+      CALL SAVVEL(F)
+      RETURN
+      END ! REFSAVVEL
+
+
+
+      SUBROUTINE REFGETVEL(UWTIN,VWTIN)
+C-----------------------------------------------------------------------
+C     Top-level VGET (GETVEL, xrotor.f) on the file FNAME, with the
+C     axial and tangential weight prompts answered by UWTIN, VWTIN.
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+C
+      GREEK = .FALSE.
+      LU = LUTEMP
+      OPEN(LU,FILE=FNAME,STATUS='OLD',ERR=95)
+      DO 10 I=1, IX
+        READ(LU,*,END=11,ERR=95) W1(I), W2(I), W3(I)
+ 10   CONTINUE
+      I = IX+1
+ 11   IF(I.LT.3) GO TO 96
+      NADD = I-1
+      CLOSE(LU)
+      DO 20 I=1, NADD
+        RADD(I) = W1(I)
+        UADD(I) = W2(I)
+        VADD(I) = W3(I)
+ 20   CONTINUE
+      UWT = UWTIN
+      VWT = VWTIN
+      DO 30 I=1, NADD
+        UADD(I) = UWT*UADD(I)
+        VADD(I) = VWT*VADD(I)
+ 30   CONTINUE
+      CALL SPLINE(UADD,UADDR,RADD,NADD)
+      CALL SPLINE(VADD,VADDR,RADD,NADD)
+      RETURN
+ 95   CONTINUE
+ 96   CONTINUE
+      RETURN
+      END ! REFGETVEL
+
+
+
+      SUBROUTINE REFLDW(N,A)
+C---- list-directed WRITE of A(1..N) into COMMON SAVFIL//FNAME (probe)
+      INCLUDE 'XROTOR.INC'
+      DIMENSION A(*)
+      CHARACTER*160 L
+      L = ' '
+      WRITE(L,*) (A(I),I=1,N)
+      SAVFIL = L(1:80)
+      FNAME = L(81:160)
+      RETURN
+      END ! REFLDW

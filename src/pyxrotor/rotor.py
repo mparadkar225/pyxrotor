@@ -16,8 +16,8 @@ with its terminal prompts turned into arguments; the State (r.s) holds everythin
 Ported here: INIT, SETDEF, ATMO, ARBI, the OPER commands ATMO, VELO, ANGL, ADVA, RPM,
 THRU, TORQ, POWE, ITER, INIT (toggle), and the DESI commands INPU, EDIT (B, RT, RH, RW, V,
 A, R, T, P, CC, CL), FORM, ITER, N (design, redesign, ...), the OPER sweeps ASEQ, RSEQ,
-BSEQ, VSEQ, ADW and case commands ADDC, CLRC, CASE, CPUT, CGET, and top-level SAVE, LOAD
-and NACE.
+BSEQ, VSEQ, ADW and case commands ADDC, CLRC, CASE, CPUT, CGET, and top-level SAVE, LOAD,
+NACE, VPUT and VGET.
 Not yet: DESI CR/CW/CX (CL from file, to file, by cursor), sequences (ASEQ/RSEQ/BSEQ/VSEQ, executed in
 xcasepl.f) are ported here; still missing: PVAR file reading, CPUT/CGET, the xrotor.def file (GETDEF/WDEF).
 """
@@ -226,17 +226,21 @@ class Rotor:
                                design every station gets the root CL)
       fix_section_fallback     a station with no valid section index uses its inner bounding
                                section (7.55 takes the outer one, or section 1 past the last)
+      fix_slipstream_splines   LOAD splines the slipstream profile it reads (7.55 leaves the
+                               spline slopes stale: zero in a fresh session)
       fix_all                  all of the above
     They are stored in r.s.fixes and can be changed there at any time.
     """
 
     def __init__(self, refresh_design_sections: bool = False, fix_linear_cl: bool = False,
-                 fix_section_fallback: bool = False, fix_all: bool = False):
+                 fix_section_fallback: bool = False, fix_slipstream_splines: bool = False,
+                 fix_all: bool = False):
         self.s = startup()
         f = self.s.fixes
         f.design_sections = bool(refresh_design_sections or fix_all)
         f.linear_cl = bool(fix_linear_cl or fix_all)
         f.section_fallback = bool(fix_section_fallback or fix_all)
+        f.slipstream_splines = bool(fix_slipstream_splines or fix_all)
 
     @property
     def refresh_design_sections(self) -> bool:
@@ -616,6 +620,37 @@ class Rotor:
         with open(path) as f:
             cases_from_lines(self.s, f.read().splitlines(), full_lines)
         return self.s.ncase
+
+    # ------------------------------------------------------------- slipstream profiles
+    def slipstream_profile(self) -> dict:
+        """The slipstream VPUT writes, from the current solution: radius r (m) and the far-
+        downstream circumferentially averaged induced velocities u (axial) and v (swirl,
+        positive in the rotation direction), m/s."""
+        from .slipstream import profile
+        r, u, v = profile(self.s)
+        return {"r": r, "u": u, "v": v}
+
+    def save_slipstream(self, path, overwrite: bool = True) -> None:
+        """VPUT f: write slipstream_profile() in XROTOR's format."""
+        from .slipstream import savvel
+        savvel(self.s, path, overwrite)
+
+    def load_slipstream(self, path, axial_weight: float = 1.0, swirl_weight: float = 1.0) -> bool:
+        """VGET f: impose a VPUT profile on this rotor's inflow, velocities multiplied by the
+        weights (XROTOR: axial 0 to 1; swirl 0, +1, or -1 for a counter-rotating rotor).
+        Returns False where XROTOR reports the profile not read."""
+        from .slipstream import getvel
+        return getvel(self.s, path, axial_weight, swirl_weight)
+
+    def set_slipstream(self, r, u, v, axial_weight: float = 1.0, swirl_weight: float = 1.0) -> None:
+        """VGET from arrays (e.g. another Rotor's slipstream_profile())."""
+        from .slipstream import set_profile
+        set_profile(self.s, r, u, v, axial_weight, swirl_weight)
+
+    def clear_slipstream(self) -> None:
+        """Remove the imposed slipstream (NADD = 0)."""
+        self.s.nadd = 0
+        self.s.conv = False
 
     # ------------------------------------------------------------- restart files
     def save(self, path, overwrite: bool = True) -> None:

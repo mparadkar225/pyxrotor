@@ -8,6 +8,7 @@ from pyxrotor.fortio import fmt_g
 from pyxrotor.nacelle import nacelle, srcvel
 from rotors import RADIUS, perturbed_states, solved_state
 from statesync import assert_states_match, state_to_ref
+from test_rotor import rotol_both
 from strategies import finite
 from test_restart import fresh, short_dir  # noqa: F401  (fixture)
 
@@ -143,7 +144,6 @@ def spinner(fix=False):
 @pytest.mark.parametrize("fix", [False, True])
 def test_nacelle_then_solve(short_dir, fix):  # noqa: F811
     """A spinner body file, then an OPER rpm solve, matches; and the arrays API equals the file."""
-    from test_rotor import rotol_both
     ref, rotor = rotol_both(22.0)
     b = spinner(fix)
     f = fresh(short_dir, ".nac")
@@ -163,7 +163,6 @@ def test_nacelle_then_solve(short_dir, fix):  # noqa: F811
        adv=finite(0.15, 0.35), theta=st.sampled_from([15.0, 22.0, 27.0]))
 def test_adw_factor(factor, free, adv, theta):
     """OPER ADW sets ADWFCTR; an ADVA solve then matches (free wake uses it, rigid ignores it)."""
-    from test_rotor import rotol_both
     ref, rotor = rotol_both(theta)
     ref["FREE"] = rotor.s.free = free
     ref["ADWFCTR"] = factor

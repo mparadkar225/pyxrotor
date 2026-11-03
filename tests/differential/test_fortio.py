@@ -126,3 +126,13 @@ def test_getflt_aborts(rec):
     p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                        cwd=Path(__file__).resolve().parents[2])
     assert p.returncode != 0 and "End of file" in p.stderr and "survived" not in p.stdout
+
+
+@SETTINGS
+@given(vals=st.lists(reals, min_size=1, max_size=3))
+def test_write_list(ref_module, vals):
+    """List-directed WRITE of REAL*8 values (VPUT's file format), up to the trailing blanks."""
+    from pyxrotor.fortio import write_list
+    ref_module.call("REFLDW", len(vals), np.array(vals, dtype=float))
+    got = (ref_module["SAVFIL"][()] + ref_module["FNAME"][()]).decode().rstrip()
+    assert write_list(*vals).rstrip() == got

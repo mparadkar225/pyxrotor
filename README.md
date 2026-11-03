@@ -16,6 +16,7 @@ used as a library and verified routine by routine against the original Fortran.
 | OPER solver (`TPQ`, `APINIT`, `APITER`, `APER`) and wake geometry | Ported, bit-identical |
 | OPER commands: `VELO`, `ANGL`, `ADVA`, `RPM`, `THRU`, `TORQ`, `POWE` (fix pitch or rpm), engine power line | Ported, bit-identical |
 | Sweeps (`ASEQ`, `RSEQ`, `BSEQ`, `VSEQ`: `SETCAS` plus `CASPLT`'s solves), case table (`ADDC`, `CLRC`, `CASE`, `CPUT`, `CGET`) | Ported, bit-identical; files byte-identical |
+| Slipstream profiles `VPUT`/`VGET` (`SAVVEL`, `GETVEL`), for coupling rotors |  Ported, bit-identical; files byte-identical |
 | Nacelle/spinner body (`NACE`: `NACELL`, `SRCVEL`), OPER `ADW` factor | Ported, bit-identical (source-position bug reproduced; fix optional) |
 | `SAVE`/`LOAD` restart files (7.55 format) | Ported, bit-identical; files byte-identical (old pre-6.9 format not ported) |
 | DESI design (`SETCLD`, `DESINI`, `DEITER`, `DESGEN`) and commands `INPU`, `EDIT`, `FORM`, `ITER`, `N` | Ported, bit-identical (stale-section bug reproduced; fix optional) |
@@ -48,6 +49,11 @@ d.write_cases("p51.cas")                      # CPUT
 d.save("p51.xr")                              # SAVE: readable by XROTOR 7.55
 r2 = Rotor(); r2.load("p51.xr")               # LOAD: XROTOR's own .xr files too
 r2.nacelle("spinner.nac")                     # NACE: body area file -> UBODY at the blades
+
+front.solve_rpm(1500.0)                       # XROTOR's way to put a rotor behind another:
+p = front.slipstream_profile()                # VPUT (or front.save_slipstream("f.vel"))
+rear.set_slipstream(p["r"], p["u"], p["v"],   # VGET: swirl weight -1 = counter-rotating
+                    axial_weight=1.0, swirl_weight=-1.0)
 r2.nacelle(z=[0, 0.5, 1.0], area=[-0.1, -0.35, -0.45], rotor_z=0.15, wake_area=-0.3)
 ```
 
@@ -61,7 +67,8 @@ By default pyxrotor reproduces XROTOR 7.55 bit for bit, bugs included (they're l
 | `Rotor(refresh_design_sections=True)` | a design keeps the previous grid's aero-section indices (outer stations extrapolate past the last section) |
 | `Rotor(fix_linear_cl=True)` | a linear design CL is set on the previous grid (a first design gets the root CL everywhere) |
 | `Rotor(fix_section_fallback=True)` | a station with no valid section index uses the wrong section (past the last section: the root one) |
-| `Rotor(fix_all=True)` | all three |
+| `Rotor(fix_slipstream_splines=True)` | LOAD leaves the slipstream profile's spline slopes stale (zero) |
+| `Rotor(fix_all=True)` | all four |
 | `nacelle(..., fix_source_positions=True)` | NACE's body sources are shifted one interval downstream |
 | `load(..., keep_free_wake=True)` | LOAD sets the free-wake flag from SAVE's duct flag |
 | `read_cases(..., full_lines=True)` | CGET drops power, thrust, torque and efficiency |

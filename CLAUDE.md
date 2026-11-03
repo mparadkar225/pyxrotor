@@ -89,7 +89,11 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
 * Fortran output and list-directed input go through `pyxrotor.fortio`, which is tested against
   gfortran (`REFFMT`, `REFRDL`). gfortran rounds ties to even on the exact binary value,
   writes `0.10000+101` for 3-digit exponents, and doesn't write trailing `X` spacing at the
-  end of a record.
+  end of a record. List-directed REAL*8 output (`fortio.write_list`, tested with `REFLDW`)
+  gives each value a 26-column block with 17 significant digits: F form in 21 columns
+  plus 5 blanks, otherwise 1P E form with a 3-digit exponent.
+* Don't import a test module inside a `@given` test: its own `@given` decorators then run
+  mid-test, and Hypothesis fails it as nested. Import at module top.
 * A Fortran runtime error (a READ without `ERR=`/`END=`, a prompt hitting EOF) kills the test
   process while `Ref755` has stdout redirected, so pytest prints nothing. Rerun the test with
   `--capture=no < /dev/null` to see the message, and test such paths in a subprocess.
@@ -166,6 +170,14 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
 * **OPER ADW sets the factor ADWFCTR**, not ADW: the free-wake condition is
   ADWFCTR·ADW·Twake/Pwake = ADV. It has no effect with a rigid wake, and a free-wake DESI
   design resets it to 1.
+* **VPUT/VGET slipstream profiles.** SAVVEL writes the far-downstream averaged induced
+  velocities (2x the disk values, from Va = Vt*r/ADW) at the *disk* radii, not the
+  contracted wake radii. VGET's weights (axial 0 to 1, swirl 0 or +-1) are the user's job;
+  -1 is for a counter-rotating rotor. UVADD imposes nothing outside the profile's radius
+  range.
+* **LOAD doesn't spline the slipstream it reads.** UADDR/VADDR stay stale (zero in a fresh
+  session), so a profile from a restart file is interpolated with zero slopes. Fix:
+  `Rotor(fix_slipstream_splines=True)` (`State.fixes.slipstream_splines`).
 * **DESI fails** (GETALF inversion, NaN wake) when the helical tip Mach number reaches about 1.
 * The generic compressibility model (dCD = K (M − Mcrit)^3, local Mach capped at 0.99) is
   very sensitive to Mcrit for transonic tips.

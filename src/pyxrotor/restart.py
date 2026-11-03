@@ -215,6 +215,9 @@ def load(s: State, path: str | os.PathLike, stations: int | None = None,
                         s.nadd = i
                     break
     s.conv = False
+    if s.fixes.slipstream_splines:                     # 7.55: UADDR/VADDR left stale
+        from .slipstream import respline
+        respline(s)
 
     if iix != s.ii and stations is not None:
         s.ii = int(stations)

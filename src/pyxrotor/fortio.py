@@ -284,3 +284,31 @@ class ListReader:
                 else:
                     vals.append(_real(t) if kind == "r" else _integer(t) if kind == "i" else _logical(t))
         return vals
+
+
+def _list_real8(x: float) -> str:
+    """One REAL*8 item of a gfortran list-directed WRITE: a 26-column block. 17 significant
+    digits; F form (0.1 <= |x| < 1e17 after rounding) right-justified in 21 columns plus 5
+    blanks, otherwise 1P E form with a 3-digit exponent right-justified in all 26."""
+    x = float(x)
+    if x != x:
+        return "NaN".rjust(26)
+    if math.isinf(x):
+        return ("-Infinity" if x < 0 else "Infinity").rjust(26)
+    neg = math.copysign(1.0, x) < 0
+    sign = "-" if neg else ""
+    d = 17
+    if x == 0.0:
+        return (sign + "0." + "0" * (d - 1)).rjust(21) + " " * 5
+    m, e = _sig(x, d)                     # |x| ~ 0.m x 10**e
+    if 0 <= e <= d:
+        return fmt_f(x, 21, d - e) + " " * 5
+    digits = str(m).rjust(d, "0")
+    exp = e - 1
+    text = f"{sign}{digits[0]}.{digits[1:]}E{'-' if exp < 0 else '+'}{abs(exp):03d}"
+    return text.rjust(26)
+
+
+def write_list(*values: float) -> str:
+    """A list-directed WRITE(LU,*) record of REAL*8 values, as gfortran writes it."""
+    return "".join(_list_real8(v) for v in values)
