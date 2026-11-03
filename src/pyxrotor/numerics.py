@@ -32,11 +32,13 @@ def gauss(z: np.ndarray, r: np.ndarray, nn: int) -> None:
         for np_ in range(nn - 1):                       # NP = np_+1
             np1 = np_ + 1
             # ---- find max pivot index NX (arithmetic IF: only '>' moves it; NaN -> moves)
-            nx = np_
-            for n in range(np1, nn):
-                d = abs(z[n, np_]) - abs(z[nx, np_])
+            col = [abs(v) for v in z[np_:nn, np_].tolist()]    # Python floats: same values
+            nx = 0
+            for n in range(1, nn - np_):
+                d = col[n] - col[nx]
                 if not (d < 0.0 or d == 0.0):
                     nx = n
+            nx += np_
             pivot = div(1.0, float(z[nx, np_]))
             # ---- switch pivots
             z[nx, np_] = z[np_, np_]
@@ -47,17 +49,29 @@ def gauss(z: np.ndarray, r: np.ndarray, nn: int) -> None:
             temp = r[nx, :] * pivot
             r[nx, :] = r[np_, :]
             r[np_, :] = temp
-            # ---- forward eliminate everything
-            for k in range(np1, nn):
-                ztmp = z[k, np_]
-                z[k, np1:nn] = z[k, np1:nn] - ztmp * z[np_, np1:nn]
-                r[k, :] = r[k, :] - ztmp * r[np_, :]
+            # ---- forward eliminate everything: the Fortran's loop over rows K, all rows
+            # at once (each element is still Z(K,L) - ZTMP*Z(NP,L), computed once)
+            ztmp = z[np1:nn, np_, None]
+            z[np1:nn, np1:nn] = z[np1:nn, np1:nn] - ztmp * z[np_, np1:nn]
+            r[np1:nn, :] = r[np1:nn, :] - ztmp * r[np_, :]
         # ---- solve for last row
         r[nn - 1, :] = r[nn - 1, :] / z[nn - 1, nn - 1]
-        # ---- back substitute everything (sequential sum over K, vectorized over RHS)
-        for np_ in range(nn - 2, -1, -1):
-            for k in range(np_ + 1, nn):
-                r[np_, :] = r[np_, :] - z[np_, k] * r[k, :]
+        # ---- back substitute everything (sequential sum over K)
+        if r.shape[1] == 1:
+            # one right-hand side: on Python floats (the same IEEE double operations, no
+            # fused multiply-add; only - and * occur, which never raise)
+            rr = r[:nn, 0].tolist()
+            for np_ in range(nn - 2, -1, -1):
+                zrow = z[np_, :nn].tolist()
+                v = rr[np_]
+                for k in range(np_ + 1, nn):
+                    v = v - zrow[k] * rr[k]
+                rr[np_] = v
+            r[:nn, 0] = rr
+        else:
+            for np_ in range(nn - 2, -1, -1):
+                for k in range(np_ + 1, nn):
+                    r[np_, :] = r[np_, :] - z[np_, k] * r[k, :]
 
 
 def trisol(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray, kk: int) -> None:

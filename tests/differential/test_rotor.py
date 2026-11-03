@@ -32,11 +32,15 @@ def test_atmo(ref_module, alt):
 def blades(draw):
     n = draw(st.integers(3, 15))
     hub = draw(finite(0.05, 0.35))
-    r = np.sort(draw(st.lists(finite(hub, 1.0), min_size=n, max_size=n, unique=True)))
+    tip = draw(finite(0.3, 3.0))
+    # ARBI needs XI0 <= r/R, with XI0 = ROOT/RAD = (hub*tip)/tip, which can round to one ulp
+    # above hub; REFARBI STOPs (exiting the test process) on a station below it
+    xi0 = (hub * tip) / tip
+    r = np.sort(draw(st.lists(finite(xi0, 1.0), min_size=n, max_size=n, unique=True)))
     c = np.array(draw(st.lists(finite(0.02, 0.3), min_size=n, max_size=n)))
     b = np.array(draw(st.lists(finite(5.0, 70.0), min_size=n, max_size=n)))
     return dict(nblds=draw(st.integers(1, 6)), vel=draw(finite(5.0, 150.0)),
-                tip_radius=draw(finite(0.3, 3.0)), hub=hub, r=r, c=c, b=np.sort(b)[::-1].copy())
+                tip_radius=tip, hub=hub, r=r, c=c, b=np.sort(b)[::-1].copy())
 
 
 def setup_both(blade, secs, ii=None, ixspac=2):

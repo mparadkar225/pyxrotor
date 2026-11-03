@@ -14,7 +14,45 @@ settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default"))
 EXPENSIVE = settings(deadline=None, max_examples=max(25, settings().max_examples // 8))
 
 
+# A Fortran STOP inside a reference call (e.g. a shim's input check) calls the C library's
+# exit(0): pytest dies mid-run, its buffered output is lost, and the exit status is 0, so a
+# truncated run looks like a pass. A C-level exit handler turns that into a failure. It
+# runs on every exit, so it only fails if pytest did not get to pytest_unconfigure.
+_SESSION = {"finished": False}
+STOP_EXIT = 13                                 # distinct from pytest's own exit codes
+
+
+def _install_stop_guard():
+    import ctypes
+    import sys
+
+    @ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_void_p)
+    def guard(status, arg):
+        if not _SESSION["finished"]:
+            capman = _SESSION.get("capman")
+            if capman is not None:                 # pytest is capturing fd 2: let it go
+                try:
+                    capman.suspend_global_capture(in_=False)
+                except Exception:
+                    pass
+            sys.stderr.write("\nERROR: the process exited inside a test (a Fortran STOP in a "
+                             "reference call?). The run is incomplete.\n")
+            sys.stderr.flush()
+            os._exit(STOP_EXIT)
+
+    libc = ctypes.CDLL(None)
+    if hasattr(libc, "on_exit"):               # glibc; elsewhere the guard is not installed
+        _SESSION["guard"] = guard              # keep the callback alive
+        libc.on_exit(guard, None)
+
+
+def pytest_unconfigure(config):
+    _SESSION["finished"] = True
+
+
 def pytest_configure(config):
+    _SESSION["capman"] = config.pluginmanager.getplugin("capturemanager")
+    _install_stop_guard()
     config.addinivalue_line("markers", "reference: checks the compiled reference libraries themselves")
     config.addinivalue_line("markers", "differential: compares a ported routine with the 7.55 reference")
     config.addinivalue_line("markers", "measurement: compares against wind-tunnel or flight data")
