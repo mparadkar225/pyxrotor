@@ -201,6 +201,22 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   estimate. 0.2 R behind, only 0.58-0.71 of the far-wake value has developed, so VGET with
   weight 1 overstates a close rear rotor's inflow.
 
+* `pair.RotorPair`: each rotor is a full XROTOR solve. It sees the other's `InducedField`,
+  imposed through UADD/VADD with the nodes *at its own station radii*: the front wake makes
+  the axial velocity jump at each trailing-vortex radius, which a spline between other
+  nodes would ring across. XROTOR's free-wake condition (equivalent prop: SETXW, TPQ's
+  TWAK/PWAK) uses WA/WT, so each wake pitch responds to the other rotor. Iterate with
+  under-relaxation of the imposed inflow (about 0.35x per iteration at w = 0.7). Limits in
+  `tests/model/test_pair.py`:
+  * At 50 R spacing the front is the isolated rotor, and the rear is XROTOR's
+    VPUT/VGET(1, -1).
+  * A near-unloaded rear leaves the front isolated.
+  * Coincident co-rotating rows are 2-3% below a rotor with twice the blades (each row's
+    tip loss is the 2-blade one).
+  * Equal-torque contra-rotation leaves no net far-wake angular momentum.
+* `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).
+  Subtraction underflows within ~1e-8 of r = a and gave NaN.
+
 ## Licensing
 
 GPL v3 or later (XROTOR is GPL v2 or later; xrotor-python is GPL v3).

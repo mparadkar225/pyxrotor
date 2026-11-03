@@ -22,6 +22,7 @@ used as a library and verified routine by routine against the original Fortran.
 | DESI design (`SETCLD`, `DESINI`, `DEITER`, `DESGEN`) and commands `INPU`, `EDIT`, `FORM`, `ITER`, `N` | Ported, bit-identical (stale-section bug reproduced; fix optional) |
 | MODI | To do |
 | **Beyond XROTOR:** induced-velocity field off the disk (`Rotor.induced_field()`), the base for rotor-rotor interaction | New model, validated against exact limits and an independent discrete vortex wake (`tests/model`) |
+| **Beyond XROTOR:** contra-rotating and tandem pairs (`RotorPair`): coupled solve; fixed pitch, power or thrust with a torque split, power at fixed pitch; gear ratio; shared nacelle | New model, validated by limits (`tests/model/test_pair.py`); tunnel data next |
 | BEND, NOIS, xrotor.def, PVAR files | To do |
 
 ```python
@@ -57,6 +58,23 @@ rear.set_slipstream(p["r"], p["u"], p["v"],   # VGET: swirl weight -1 = counter-
                     axial_weight=1.0, swirl_weight=-1.0)
 r2.nacelle(z=[0, 0.5, 1.0], area=[-0.1, -0.35, -0.45], rotor_z=0.15, wake_area=-0.3)
 ```
+
+### Contra-rotating propellers
+
+```python
+from pyxrotor.pair import RotorPair
+
+pair = RotorPair(front, rear, spacing=0.25)   # two set-up Rotors, rear 0.25 m behind
+res = pair.solve_power(1.5e6, rpm=1300.0, torque_split=0.5)   # equal torques
+res.thrust, res.efficiency, res.front["torque"], res.rear["torque"], res.net_torque
+res.swirl_power_fraction                      # far-wake swirl loss (~0 when balanced)
+pair.field(r, z)                              # the pair's induced velocity anywhere
+```
+
+Each rotor is a full XROTOR solve that sees the other's averaged induced velocity at the
+actual spacing (axial only ahead of a disk; the slipstream's axial velocity and swirl
+behind it). The two are iterated to convergence. Not modeled yet: slipstream contraction,
+viscous wakes, blade-passing unsteadiness.
 
 ## 7.55 bugs and fixes
 

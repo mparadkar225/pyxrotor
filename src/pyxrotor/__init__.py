@@ -22,6 +22,7 @@ Modules (each a port of the named XROTOR routines, bit-identical to 7.55):
 
 New models (not in XROTOR, validated in tests/model):
     field      induced-velocity field of a solved rotor anywhere in space
+    pair       contra-rotating (or co-rotating tandem) rotor pairs (RotorPair)
     oper       TPQ, APINIT, APITER, APER
     induced    VCALC, GRADMO, HELICO, VRTXCO, VORSEGVEL
     wake       UVADD, CSCALC, XWINIT, SETXW

@@ -126,20 +126,31 @@ def ellippi(n, m):
 
 
 # ---------------------------------------------------------------------- vortex cylinder
+def _scaled_pi(t, m):
+    """t * Pi(1 - t^2, m) for t = (a - r)/(a + r), accurate as t -> 0, where Pi alone is
+    singular (1 - k0^2 = t^2 exactly, which subtraction cannot form near the sheet). At
+    t = 0 its limit is sign * pi / (2 sqrt(1 - m)); the inside (+) limit is used there."""
+    p = t * t
+    n = 1.0 - p
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rj = _carlson_rj(0.0, 1.0 - m, 1.0, np.where(p > 0.0, p, 1.0))
+        val = t * (_carlson_rf(0.0, 1.0 - m, 1.0) + n / 3.0 * rj)
+    return np.where(p > 0.0, val, 0.5 * PI / np.sqrt(1.0 - m))
+
+
 def cylinder_velocity(gamma, a, r, z):
     """Axial and radial velocity at (r, z) of a semi-infinite vortex cylinder of radius a,
     from z = 0 to +inf, with ring vorticity gamma per unit length (so the axial velocity far
-    inside it is gamma). Broadcasts over all arguments. On r = a, the inside value is used."""
+    inside it is gamma). Broadcasts over all arguments. On the sheet (r = a) the axial
+    velocity is the inside limit; on its edge (r = a, z = 0) the radial one is infinite."""
     gamma, a, r, z = np.broadcast_arrays(*(np.asarray(v, float) for v in (gamma, a, r, z)))
-    r = np.where(r == a, a * (1.0 - 1e-12), r)          # on the sheet: inside limit
     rr = np.maximum(r, 1e-300)
     k2 = 4.0 * rr * a / ((a + rr) ** 2 + z * z)
-    k02 = 4.0 * rr * a / (a + rr) ** 2
     k = np.sqrt(k2)
-    step = np.where(r < a, 1.0, 0.0)                    # (R - r + |R - r|) / (2 |R - r|)
+    t = (a - rr) / (a + rr)
+    step = np.where(r <= a, 1.0, 0.0)                   # (R - r + |R - r|) / (2 |R - r|)
     with np.errstate(divide="ignore", invalid="ignore"):
-        term = z * k / (2.0 * PI * np.sqrt(rr * a)) * (
-            ellipk(k2) + (a - rr) / (a + rr) * ellippi(k02, k2))
+        term = z * k / (2.0 * PI * np.sqrt(rr * a)) * (ellipk(k2) + _scaled_pi(t, k2))
         uz = 0.5 * gamma * (step + term)
         ur = -gamma / (2.0 * PI) * np.sqrt(a / rr) * ((2.0 - k2) / k * ellipk(k2) - 2.0 / k * ellipe(k2))
     ur = np.where(r <= 0.0, 0.0, ur)                    # on the axis by symmetry

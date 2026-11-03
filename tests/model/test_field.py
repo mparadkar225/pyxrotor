@@ -237,3 +237,16 @@ def test_field_matches_discrete_vortex_wake(rotor, discrete, rr, zz):
     scale = float(np.abs(f.velocity(np.array(s.xi[: s.ii]) * s.rad, 1e4 * s.rad)[0]).max())
     for name, g, d in zip(("axial", "radial", "swirl"), got, ref):
         assert abs(g - d) < 3e-3 * scale, (name, rr, zz, g, d, scale)
+
+
+def test_cylinder_on_and_near_its_sheet():
+    """Within ~1e-8 of r = a, 1 - k0^2 underflows if formed by subtraction (it was NaN).
+    Downstream the axial velocity jumps by exactly gamma across the sheet; upstream it is
+    continuous; on the sheet it takes the inside value."""
+    for z in (0.3, 2.0, 1000.0):
+        vals = [float(cylinder_velocity(1.0, 1.0, x, z)[0]) for x in (1 - 1e-6, 1 - 1e-12, 1.0, 1 + 1e-12, 1 + 1e-6)]
+        assert np.isfinite(vals).all()
+        assert vals[2] == pytest.approx(vals[1], abs=1e-9)
+        assert vals[1] - vals[3] == pytest.approx(1.0, abs=1e-9)
+    up = [float(cylinder_velocity(1.0, 1.0, x, -0.5)[0]) for x in (1 - 1e-12, 1.0, 1 + 1e-12)]
+    assert max(up) - min(up) < 1e-9
