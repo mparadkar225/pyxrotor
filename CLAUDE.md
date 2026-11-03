@@ -8,7 +8,7 @@ port is only as good as its differential tests against it.
 ```bash
 git submodule update --init      # reference sources
 reference/build.sh               # build both reference libraries (~1 min)
-pytest                           # everything (~1.5 min)
+pytest                           # everything (~4-5 min on CI; the design tests take half)
 pytest tests/differential -q     # just the port-vs-Fortran tests
 HYPOTHESIS_PROFILE=deep pytest tests/differential -W error::RuntimeWarning   # 20k cases/test
 python tools/common_writes.py TPQ APITER    # COMMON variables a Fortran routine assigns
