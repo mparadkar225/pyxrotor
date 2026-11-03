@@ -61,8 +61,13 @@ Over the attached-flow range (J where both CT and CP were digitized), model / me
 * **Rear/front power ratio:** test 1.03–1.13 in the lightly stalled region and falling to
   0.75–0.97 towards zero thrust (the rear is set lower); the model follows the same shape
   but up to 0.10 lower in the attached range, i.e. it underloads the rear relative to the
-  front. Slipstream contraction would raise the rear's inflow and lower the ratio further,
-  so the test gives no evidence that contraction is needed at this spacing.
+  front.
+* **Slipstream contraction is negligible at this spacing.** 
+  scales the front's field to an actuator-disk contraction at the rear's distance: the
+  slipstream radius shrinks 0.1–1.5% (most at take-off loading) and the rear's power
+  changes by less than 0.15%. Even fully developed contraction (a widely spaced pair,
+  3–9%) changes it by under 0.8%. It cannot account for the 3–23% front or the rear/front
+  differences here.
 * Low-J CP (stalled blades) is underpredicted by up to 40%, as with R&M 2357's torque near
   stall: the section model's post-stall drag is not meant for it.
 
