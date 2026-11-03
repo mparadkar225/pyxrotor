@@ -19,7 +19,8 @@ C = {(c["rotation"], c["quantity"], c["beta_front"]): c for c in data["curves"]}
 
 def meas(rot, q, b, J):
     c = C.get((rot, q, b))
-    if c and c["J"][0] - 1e-9 <= J <= c["J"][-1] + 1e-9:
+    # rear CP curves (figure 12) have gaps where the dashes merge into the solid line
+    if c and c["J"][0] - 1e-9 <= J <= c["J"][-1] + 1e-9 and np.min(np.abs(np.array(c["J"]) - J)) < 0.03:
         return float(np.interp(J, c["J"], c["value"]))
     return None
 
@@ -65,6 +66,23 @@ def main():
             print(f"{b:4.0f} {p['J']:.2f}   {row['ct_m']:.3f} / {row['ct_p']:.3f}         "
                   f"{row['cp_m']:.3f} / {row['cp_p']:.3f}         {row['de_m']:+.3f} / {row['de_p']:+.3f}")
     out["interaction"] = inter
+    # front and rear separately (figure 12), dual, over the attached-flow range
+    print("\ndual, front and rear CP separately (figure 12), attached flow: model / measured")
+    print("beta  J     front            rear             rear/front")
+    split = []
+    for r in res:
+        if r["kind"] != "dual" or not r["converged"]:
+            continue
+        b, J = r["beta"], r["J"]
+        f, rr = meas("dual", "CP_front", b, J), meas("dual", "CP_rear", b, J)
+        if f is None or rr is None or meas("dual", "CT", b, J) is None:
+            continue
+        row = dict(beta=b, J=J, front=r["CP_front"] / f, rear=r["CP_rear"] / rr,
+                   ratio_p=r["CP_rear"] / r["CP_front"], ratio_m=rr / f)
+        split.append(row)
+        print(f"{b:4.0f} {J:.2f}   {r['CP_front']:.4f}/{f:.4f}  {r['CP_rear']:.4f}/{rr:.4f}  "
+              f"{row['ratio_p']:.3f}/{row['ratio_m']:.3f}")
+    out["split"] = split
     (HERE / "summary.json").write_text(json.dumps(out, indent=1))
 
 

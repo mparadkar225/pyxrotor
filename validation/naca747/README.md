@@ -18,9 +18,14 @@ total power.
   figure's blade-angle labels to 0.05 deg).
 * `tests.json`: CT and CP against V/nD from figures 8, 9 (single) and 11, 13 (dual), no
   wing, digitized with `tools/digitize.py` at 0.02 steps on the attached-flow branches;
+  front and rear CP separately from figure 12 (quantities `CP_front`, `CP_rear`; solid
+  and dashed lines separated by connected-component length, rear points only where the
+  dashes are visible, which leaves gaps where the two curves touch, and none for 20°);
   the dual rear blade angles; peak efficiencies read from figures 7 and 10. Its `notes`
   record two corrections (crops that missed the CP = 0 or J = 0 grid line), found because
   CT J / CP came out above 1.
+* `digitizing/`: the chart boxes and calibrations, and the figure 12 and 13c procedures
+  (`NACA747_PAGES` points at 300 dpi page renders, `pdftoppm -r 300 -png`).
 * `model.py`: the pyxrotor models. Both configurations are `RotorPair`s (co-rotating for
   "single"); `disk4` is one 4-blade disk for reference. Clark Y polars are estimated from
   thickness ratio, as for R&M 2357.
@@ -36,7 +41,7 @@ Over the attached-flow range (J where both CT and CP were digitized), model / me
 | single 20–40° | −0.4 to −5.6% | −2.5 to −5.7% | −0.022 to +0.016 |
 | single 45–50° | +5 to +8% | +1% | +0.025 to +0.033 |
 | dual 20–30° | +6 to +7% | +3% | +0.02 to +0.04 |
-| dual 35–45° | +11 to +18% | +7 to +13% | +0.02 to +0.03 |
+| dual 35–50° | +11 to +18% | +7 to +15% | +0.02 to +0.03 |
 
 * **The counter-rotation efficiency gain is right where it matters.** Peak efficiency,
   dual minus single (figures 10 and 7): test +0.005, −0.005, +0.001, +0.007, +0.011,
@@ -45,19 +50,23 @@ Over the attached-flow range (J where both CT and CP were digitized), model / me
   is about 0.01 optimistic.
 * **The dual propeller is loaded more in the model than in the test** at the same nominal
   blade angles, while the single one matches. Near zero thrust that is about 0.6° of
-  effective pitch. Figure 12 (individual CPs, probed at a few J for 40°) shows front and
-  rear absorbing nearly equal power near peak efficiency (rear/front 0.95 at J = 1.85),
-  and the front below the model by about 15%. Since the circumferentially averaged
-  upstream influence of the rear is the same for either rotation direction, this looks
-  like the hardware's setting rather than the interaction; the report itself compares
-  single and dual only after shifting the dual curves to the same zero-thrust J.
-* Rear/front power in the model is 0.88 at J = 1.8 (test about 0.95), i.e. the model's
-  rear is somewhat underloaded relative to the front. Slipstream contraction would move
-  that further the wrong way at this spacing, so the test gives no evidence that it is
-  needed here.
+  effective pitch. The report itself compares single and dual only after shifting the
+  dual curves to the same zero-thrust J.
+* **Figure 12 puts most of that on the front rotor.** Over the attached-flow range the
+  model's front CP is 3–23% above the test (worst near zero thrust), the rear's −1 to
+  +13%. The circumferentially averaged upstream influence of the rear is the same for
+  either rotation direction, and the co-rotating front is not overpredicted, so nothing
+  in an averaged interaction model produces this; candidates are the hardware (blade
+  setting, the opposite-hand rear blades) or unsteady blade-passing effects.
+* **Rear/front power ratio:** test 1.03–1.13 in the lightly stalled region and falling to
+  0.75–0.97 towards zero thrust (the rear is set lower); the model follows the same shape
+  but up to 0.10 lower in the attached range, i.e. it underloads the rear relative to the
+  front. Slipstream contraction would raise the rear's inflow and lower the ratio further,
+  so the test gives no evidence that contraction is needed at this spacing.
 * Low-J CP (stalled blades) is underpredicted by up to 40%, as with R&M 2357's torque near
   stall: the section model's post-stall drag is not meant for it.
 
-`tests/measurement/test_naca747.py` checks the data's internal consistency and pins
+Figure 12's front + rear agrees with figure 13's total (digitized separately) to 0.002 on
+average. `tests/measurement/test_naca747.py` checks the data's internal consistency and pins
 single-rotation CT/CP, the efficiency gain, and the known dual loading discrepancy at a
 few points.

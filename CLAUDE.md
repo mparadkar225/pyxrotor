@@ -218,8 +218,10 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   "single" 4-blade propeller is two 2-blade hubs co-rotating 0.16 R apart, so model it as a
   co-rotating RotorPair. Dual-minus-single peak efficiency matches (+0.022/+0.029 at 45/50°,
   model +0.023/+0.029); the model's dual is ~0.6° of pitch more loaded than the test while
-  single matches. Digitizing: a crop whose lowest grid line isn't the axis shifts every
-  value by one step; check CT·J/CP against the report's efficiency curves.
+  single matches, and figure 12 (front/rear CP) puts that mostly on the front rotor
+  (+3-23% vs rear -1 to +13%). Digitizing: a crop whose lowest grid line isn't the axis shifts every
+  value by one step; check CT·J/CP against the report's efficiency curves. Solid vs
+  dashed lines: separate by connected-component length (`validation/naca747/digitizing`).
 * `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).
   Subtraction underflows within ~1e-8 of r = a and gave NaN.
 

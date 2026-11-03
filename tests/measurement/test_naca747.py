@@ -94,3 +94,19 @@ def test_known_discrepancy_dual_loading(points):
     J, r = points[("J", 45)], points[("dual", 45)]
     ratio = r["CT"] / measured("dual", "CT", 45, J)
     assert 1.10 < ratio < 1.25
+    # figure 12: the excess is mostly the front rotor's (model 1.20x, rear 1.09x at J = 2.2)
+    front = r["CP_front"] / measured("dual", "CP_front", 45, J)
+    rear = r["CP_rear"] / measured("dual", "CP_rear", 45, J)
+    assert 1.12 < front < 1.28 and 1.02 < rear < 1.15 and front > rear + 0.05
+
+
+def test_individual_powers_add_up_to_the_total():
+    """Figure 12's front and rear CP (digitized separately: solid and dashed lines) sum to
+    figure 13's total, which was digitized independently."""
+    for b in (25, 30, 35, 40, 45, 50):
+        f, r, t = (CURVES[("dual", q, b)] for q in ("CP_front", "CP_rear", "CP"))
+        J = np.array([j for j in r["J"] if t["J"][0] <= j <= t["J"][-1] and f["J"][0] <= j <= f["J"][-1]])
+        assert len(J) >= 5, b
+        err = (np.interp(J, f["J"], f["value"]) + np.interp(J, r["J"], r["value"])
+               - np.interp(J, t["J"], t["value"]))
+        assert abs(err.mean()) < 0.003 and abs(err).max() < 0.012, b   # worst: a curve end
