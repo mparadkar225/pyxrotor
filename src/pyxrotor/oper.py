@@ -355,7 +355,7 @@ def apinit(s: State) -> None:
 
         # ---- momentum-theory estimate of axial velocity sets the wake advance ratio
         vhsq = 0.5 * tsum / PI
-        vhsq = fm.fmax(vhsq, -0.25)
+        vhsq = fm.fmax2(vhsq, -0.25)                      # NaN -> -0.25 (minmax_sites)
         s.adw = s.adv * 0.5 * (1.0 + fm.sqrt(1.0 + 4.0 * vhsq))
 
         vcalc(s)
@@ -443,14 +443,14 @@ def apinit(s: State) -> None:
 
             # ---- momentum-theory estimate of induced axial velocity
             vhsq = 0.5 * tsum / PI
-            vhsq = fm.fmax(vhsq, -0.2499)
+            vhsq = fm.fmax2(vhsq, -0.2499)                # NaN -> -0.2499
             vhsq_t = 0.5 / PI
             root = fm.sqrt(1.0 + 4.0 * vhsq)
             rez = s.adw - s.adv * 0.5 * (1.0 + root)
             z_adw = 1.0 - div(s.adv, root) * vhsq_t * t_adw
             s.dadw = -div(rez, z_adw)
-            s.dadw = fm.fmin(s.dadw, 10.0 * s.adw)
-            s.dadw = fm.fmax(s.dadw, -0.9 * s.adw)
+            s.dadw = fm.fmin2(s.dadw, 10.0 * s.adw)       # NaN -> the ADW bound
+            s.dadw = fm.fmax2(s.dadw, -0.9 * s.adw)
             s.adw = s.adw + s.dadw
 
             if rlxmin < 0.2:
@@ -610,14 +610,15 @@ def apiter(s: State, ispec: int, icon: int) -> None:
                 dcl = div(2.0 * dgam, float(s.ch[i]) * w)
                 dclmin = fm.fmax(1.5 * dclstall[i], abs(cli - clmin[i]))
                 dclmax = fm.fmax(1.5 * dclstall[i], abs(clmax[i] - cli))
-                dcllim = fm.fmin(fm.fmin(0.5, dclmin), dclmax)
-                dcllim = fm.fmax(dcllim, 0.01)
+                # MIN(0.5,DCLMIN,DCLMAX) compiles as MINSD(MINSD(DCLMAX,DCLMIN),0.5)
+                dcllim = fm.fmin2(fm.fmin2(dclmax, dclmin), 0.5)
+                dcllim = fm.fmax2(dcllim, 0.01)
                 if rlx * abs(dcl) > dcllim:
-                    rlx = fm.fmin(rlx, div(dcllim, abs(dcl)))
+                    rlx = fm.fmin2(rlx, div(dcllim, abs(dcl)))
                 # ---- limit GAM changes that change sign
                 if dgam * float(s.dgamold[i]) < 0.0:
                     if abs(dgam) > 0.2 * abs(float(s.dgamold[i])):
-                        rlx = fm.fmin(rlx, 0.2)
+                        rlx = fm.fmin2(rlx, 0.2)
 
             s.dadv = -float(s.dq[k1])
             s.dadw = -float(s.dq[k2])

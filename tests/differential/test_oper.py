@@ -110,3 +110,24 @@ def test_apiter_vortex_wake(ref_module, case):
     ref_module.call("APITER", ispec, icon)
     apiter(s, ispec, icon)
     assert_states_match(s, ref_module)
+
+
+@pytest.mark.parametrize("bad", ["all_chord", "one_chord", "beta", "adv_zero"])
+def test_apinit_non_finite(ref, bad):
+    """APINIT's MAX(VHSQ,-0.25) and MIN/MAX(DADW, k*ADW) return their *second* argument for a
+    NaN first one (MAXSD/MINSD source operand; see tools/minmax_sites.py), e.g. after a
+    diverged design leaves NaN geometry."""
+    from rotors import solved_state
+    s = solved_state()
+    if bad == "all_chord":
+        s.ch[:s.ii] = np.nan
+    elif bad == "one_chord":
+        s.ch[s.ii // 2] = np.nan
+    elif bad == "beta":
+        s.beta[:3] = np.nan
+    else:
+        s.adv = 0.0
+    state_to_ref(s, ref)
+    ref.call("APINIT")
+    apinit(s)
+    assert_states_match(s, ref)

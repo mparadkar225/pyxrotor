@@ -94,3 +94,17 @@ def test_vrtxco(ref_module, s, rake):
     call_model(ref_module, "VRTXCO", s)
     vrtxco(s)
     assert_states_match(s, ref_module)
+
+
+@pytest.mark.parametrize("adw", [float("nan"), float("inf"), 0.0, -0.5, 1.0e-10])
+@pytest.mark.parametrize("model", ["GRADMO", "HELICO", "VRTXCO"])
+def test_wake_models_non_finite_adw(ref, adw, model):
+    """Diverging DEITER/APITER iterations reach the wake models with NaN, zero or tiny ADW.
+    VRTXCO then converts a non-finite helix angle with IFIX (-2**31 on x86-64)."""
+    port = {"GRADMO": gradmo, "HELICO": helico, "VRTXCO": vrtxco}[model]
+    s = solved_state()
+    s.adw = adw
+    state_to_ref(s, ref)
+    call_model(ref, model, s)
+    port(s)
+    assert_states_match(s, ref)

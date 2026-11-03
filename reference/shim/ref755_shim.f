@@ -198,3 +198,159 @@ C----- convergence failed: restore clobbered blade angles
       ENDIF
       RETURN
       END
+
+
+
+      SUBROUTINE REFDESGEN(OKIN,LFIXIA)
+C-----------------------------------------------------------------------
+C     DESGEN (xdesi.f) with the Betz-limit prompt answered by OKIN.
+C     Returns CONV unchanged if DESGEN returns early.
+C     LFIXIA (not in 7.55): CALL SETIAERO on the new grid after XWINIT,
+C     the fix for the stale aero-section indices.
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      LOGICAL OK, OKIN, LFIXIA
+C
+      DO I=1, II
+        N = 1
+        CALL GETAERO(N,XISECT,A0,CLMAX,CLMIN,
+     &              DCLDA,DCLDA_STALL,DCL_STALL,
+     &              CDMIN,CLDMIN,DCDCL2,CMCON,MCRIT,REREF,REXP)
+        IF(CLDES(I).GT.CLMAX .OR. CLDES(I).LT.CLMIN) RETURN
+      ENDDO
+C
+C---- Set up operating parameters
+      CONV = .FALSE.
+      BLDS = FLOAT(NBLDS)
+      RAD = RADDES
+      VEL = VELDES
+      IF(ADVDES.EQ.0.0) THEN
+       ADV = VELDES/(RADDES*RPMDES*PI/30.0)
+      ELSE
+       ADV = ADVDES
+      ENDIF
+C
+C---- Check for reasonable thrust or power inputs
+      TMIN = -0.5*PI*RHO*VEL**2*RAD**2
+      PMIN = -0.5*PI*RHO*VEL**3*RAD**2 * 16.0/27.0
+      IF((DEST .AND. TDDES.LT.TMIN).OR.(DESP .AND. PDDES.LT.PMIN)) THEN
+       OK = OKIN
+       IF(.NOT.OK) RETURN
+      ENDIF
+C
+C---- Non-dimensionalize design thrust or power
+      TDES = TDDES/(RHO*VEL**2*RAD**2)
+      PDES = PDDES/(RHO*VEL**3*RAD**2)
+C
+C---- Set up discrete coordinates
+      XI0 = R0DES/RAD
+      XW0 = RWDES/RAD
+      CALL SETX
+      CALL XWINIT
+      IF(LFIXIA) CALL SETIAERO
+C
+C---- Fill CL array with design-CL array
+      DO I=1, II
+        CL(I) = CLDES(I)
+        STALL(I) = .FALSE.
+      ENDDO
+C
+C---- Initialize wake advance ratios
+      EFFINV = 1.0
+      IF(FREE.AND.DEST) EFFINV = 0.50*SQRT(ABS(1.0+TDES*2./PI)) + 0.50
+      IF(FREE.AND.DESP) EFFINV = 0.25*SQRT(ABS(1.0+PDES*4./PI)) + 0.75
+      UDUCT     = 0.0
+      IF(DUCT) THEN
+        UDUCT = URDUCT-1.0
+      ENDIF
+      ADW = EFFINV*ADV
+C
+C---- Initialize rotor for iteration
+      IF(LDESINI .OR. .NOT.LROTOR) CALL DESINI
+C
+C---- Calculate MIL rotor (varying chord, varying twist, fixed CL case)
+      CALL DESMIL(2)
+      RETURN
+      END ! REFDESGEN
+
+
+
+      SUBROUTINE REFDINPU(NBIN,RTIN,RHIN,RWIN,VIN,AIN,RPIN,
+     &                    TIN,PIN,CLIN,OKIN,LFIXIA)
+C-----------------------------------------------------------------------
+C     DESI INPU (xdesi.f) with prompts as arguments, then the EDIT
+C     <Return> that follows it (LDESINI, DESGEN). TIN = PIN = 0 is
+C     re-prompted in XROTOR; here it returns without designing.
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      LOGICAL OKIN, LFIXIA
+C
+      NBLDS = NBIN
+      RADDES = RTIN
+      R0DES = RHIN
+      RWDES = RWIN
+      VELDES = VIN
+      ADVDES = 0.
+      RPMDES = 0.
+      ADVDES = AIN
+      IF(ADVDES.EQ.0.0) RPMDES = RPIN
+      TDDES = 0.
+      PDDES = 0.
+      TDDES = TIN
+      IF(TDDES.EQ.0.0) PDDES = PIN
+      IF(TDDES.EQ.0.0 .AND. PDDES.EQ.0.0) RETURN
+      DEST = TDDES .NE. 0.0
+      DESP = .NOT.DEST
+      CLDES0 = CLIN
+      IF(CLDES0 .EQ. 0.0) THEN
+        IF(DEST) CLDES1 = SIGN(0.8,TDDES)
+        IF(DESP) CLDES1 = SIGN(0.8,PDDES)
+        CALL SETCLD(CLDES1,CLDES1)
+      ELSE
+        CALL SETCLD(CLDES0,CLDES0)
+      ENDIF
+      IF(NAME.EQ.' ') NAME = 'Designed blade'
+      LROTOR = .FALSE.
+C
+      LDESINI = .TRUE.
+      CALL REFDESGEN(OKIN,LFIXIA)
+      RETURN
+      END ! REFDINPU
+
+
+
+      SUBROUTINE REFDESN(IINEW)
+C-----------------------------------------------------------------------
+C     DESI N (xdesi.f): change the number of radial stations.
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+C
+      IF(LROTOR) THEN
+       IISAV = II
+       DO I = 1, IISAV
+         W1(I) = XI(I)
+         W2(I) = CH(I)
+         W4(I) = BETA(I)
+         W6(I) = UBODY(I)
+         W8(I) = CLDES(I)
+       ENDDO
+       CALL SPLINE(W2,W3,W1,II)
+       CALL SPLINE(W4,W5,W1,II)
+       CALL SPLINE(W6,W7,W1,II)
+       CALL SPLINE(W8,W9,W1,II)
+      ENDIF
+C
+      II = IINEW
+      IINF = II + II/2
+      CALL SETX
+      IF(LROTOR) THEN
+       DO I = 1, II
+         CH(I)    = SEVAL(XI(I),W2,W3,W1,IISAV)
+         BETA(I)  = SEVAL(XI(I),W4,W5,W1,IISAV)
+         UBODY(I) = SEVAL(XI(I),W6,W7,W1,IISAV)
+         CLDES(I) = SEVAL(XI(I),W8,W9,W1,IISAV)
+         BETA0(I) = BETA(I)
+       ENDDO
+      ENDIF
+      RETURN
+      END ! REFDESN

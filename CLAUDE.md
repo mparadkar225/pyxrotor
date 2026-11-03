@@ -12,6 +12,7 @@ pytest                           # everything (~1.5 min)
 pytest tests/differential -q     # just the port-vs-Fortran tests
 HYPOTHESIS_PROFILE=deep pytest tests/differential -W error::RuntimeWarning   # 20k cases/test
 python tools/common_writes.py TPQ APITER    # COMMON variables a Fortran routine assigns
+python tools/minmax_sites.py xoper --routine APITER   # how each MIN/MAX treats NaN
 python tools/gen_layout.py                  # regenerate src/pyxrotor/_layout.py from XROTOR.INC
 ```
 
@@ -51,10 +52,16 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
    * Python raises where Fortran returns inf/NaN. Use `pyxrotor.fmath` (`div`, `pow`,
      `sqrt`, `exp`, `log`, `sin`, `cos`) wherever a zero divisor, overflow, or invalid
      argument is possible. Diverging Newton iterations reach these paths and tests cover them.
-   * MIN/MAX with NaN: in the compiled reference every site tested returns the *first*
-     argument (`fmath.fmin/fmax`, same as Python's built-ins). gfortran documents this as
-     unspecified and a standalone probe behaved differently, so pin new sites with a
-     non-finite test against the compiled routine (see `test_clcdcm_non_finite`).
+   * MIN/MAX with NaN depend on the call site. Each compiles to MINSD/MAXSD, which return the
+     *source* operand when either operand is NaN. A constant or memory operand is always the
+     source; otherwise register allocation decides. `python tools/minmax_sites.py xoper
+     --routine APINIT --context 8` lists each site with its source line and operands. Port
+     NaN→first-argument sites with `fmath.fmin/fmax` and NaN→second-argument sites with
+     `fmin2/fmax2`. For example, APINIT's `MAX(VHSQ,-0.25)` returns -0.25, while CLCDCM's
+     `MAX(0.0,x)` returns 0.0. Pin each site with a non-finite test (`test_apinit_non_finite`,
+     `test_clcdcm_non_finite`).
+   * IFIX/INT of NaN, ±inf or anything outside the INTEGER*4 range gives -2**31 (`fmath.ifix`).
+     INTEGER arithmetic wraps (`fmath.iwrap`). VRTXCO reaches this path when ADW is NaN or 0.
    * Convert inputs to `float` at public entry points: NumPy scalars arriving from arrays
      (e.g. `xi[i]`) silently change overflow and divide-by-zero behavior.
    * Indices are 0-based in Python. Fortran IAERO = N is `iaero = N - 1`; "unset" (0) is -1.
@@ -80,10 +87,21 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
 ## Known issues in XROTOR 7.55 (all reproduced faithfully unless noted)
 
 * **Stale aero-section indices after DESI.** If aero sections are defined before the first
-  design, `IAERO` is computed against the pre-design radial grid and DESI never refreshes
-  it, so outer stations extrapolate past the last section (negative Cd). In a P-51D test this
-  overstated design efficiency (85.3% vs 79.8%). ARBI and LOAD call SETIAERO and are fine.
-  Fix: call SETIAERO after DESI. (DESI not yet ported.)
+  design, `IAERO` is computed against the pre-design radial grid (all zeros at start-up), and
+  DESGEN never refreshes it. Outer stations then extrapolate past the last section and get a
+  negative Cd. In the P-51D test (`test_p51d_stale_sections`), 7.55 reports 85.27%. The same
+  blade re-analysed with the correct sections gives 79.80% and draws 5% more power; a
+  design made with the correct sections gives 80.26%. ARBI and LOAD call SETIAERO, so they
+  are not affected. The fix is `Rotor(refresh_design_sections=True)`, which runs SETIAERO
+  after SETX in DESGEN. The shim's `REFDESGEN(OK, LFIXIA)` is the oracle for the fixed path.
+* **DESI SETCLD uses the current (pre-DESGEN) XI grid**, so a linear CL (`EDIT CL`) is
+  evaluated on the previous design's stations. On a first design every station is at
+  XI = 0, so the whole blade gets the root CL.
+* **DESI `ITER n` (with an inline argument) sets NITERA**, the OPER limit. Only the prompted
+  form sets the design limit NITERD.
+* **DEITER's ducted branch reads GAMDES**, a local that is never initialized, so a ducted
+  design is undefined in 7.55. pyxrotor raises NotImplementedError. DESINI's ZETA is likewise
+  undefined if neither DEST nor DESP is set; pyxrotor raises ValueError.
 * **GETCLCDCM's fallback picks the wrong section.** When a station's IAERO is invalid (as
   INIT leaves it, 0 everywhere, until SETIAERO runs), the recovery search exits with N at the
   first section *outboard* of the station instead of the inner bounding one.

@@ -290,10 +290,12 @@ def theta_spacing(adw: float) -> np.ndarray:
     thet2 = div(4.0, adw)
     dth3 = PI_EXACT / 8.0
     thet3 = div(50.0, adw)
-    n1 = int(2.0 * thet1 / (dth2 + dth1))               # IFIX truncates toward zero
-    n2 = int(2.0 * (thet2 - thet1) / (dth3 + dth2))
-    ddth1 = div(dth2 - dth1, float(n1 - 1))
-    ddth2 = div(dth3 - dth2, float(n2 - 1))
+    # IFIX truncates toward zero; a non-finite or huge THET (ADW NaN, 0 or tiny) gives -2**31,
+    # and N1-1 then wraps to +2**31-1 in the compiled reference
+    n1 = fm.ifix(2.0 * thet1 / (dth2 + dth1))
+    n2 = fm.ifix(2.0 * (thet2 - thet1) / (dth3 + dth2))
+    ddth1 = div(dth2 - dth1, float(fm.iwrap(n1 - 1)))
+    ddth2 = div(dth3 - dth2, float(fm.iwrap(n2 - 1)))
 
     thetspc = []
     thet, dth = 0.0, dth1

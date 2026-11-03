@@ -8,10 +8,12 @@
     r.velocity(40.0)
     r.solve_rpm(1200.0)               # or solve_advance_ratio / solve_thrust / ...
     r.performance()
+    r.design(nblds, tip_radius, hub_radius, vel, rpm=..., power=..., cl=...)   # DESI
 
 Modules (each a port of the named XROTOR routines, bit-identical to 7.55):
     state      State: all 27 COMMON blocks
-    rotor      INIT, SETDEF, ATMO, ARBI, OPER commands (Rotor)
+    rotor      INIT, SETDEF, ATMO, ARBI, OPER and DESI commands (Rotor)
+    design     SETCLD, DESINI, DEITER, DESMIL, DESGEN
     oper       TPQ, APINIT, APITER, APER
     induced    VCALC, GRADMO, HELICO, VRTXCO, VORSEGVEL
     wake       UVADD, CSCALC, XWINIT, SETXW

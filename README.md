@@ -16,7 +16,8 @@ used as a library and verified routine by routine against the original Fortran.
 | OPER solver (`TPQ`, `APINIT`, `APITER`, `APER`) and wake geometry | Ported, bit-identical |
 | OPER commands: `VELO`, `ANGL`, `ADVA`, `RPM`, `THRU`, `TORQ`, `POWE` (fix pitch or rpm), engine power line | Ported, bit-identical |
 | Sweeps (`ASEQ`, `RSEQ`, `BSEQ`, `VSEQ`; executed in xcasepl.f), case files | Next |
-| DESI (minimum-induced-loss design), MODI | To do |
+| DESI design (`SETCLD`, `DESINI`, `DEITER`, `DESGEN`) and commands `INPU`, `EDIT`, `FORM`, `ITER`, `N` | Ported, bit-identical (stale-section bug reproduced; fix optional) |
+| MODI | To do |
 | BEND, NOIS, restart files | To do |
 
 ```python
@@ -31,6 +32,13 @@ r.arbi(nblds=2, vel=50.0, tip_radius=1.64, hub_radius=0.33,
 r.velocity(40.0)
 r.solve_rpm(1200.0)                           # or solve_thrust(800.0, fix="rpm"), ...
 print(r.performance())                        # thrust, power, efficiency, CT, CP, ...
+
+d = Rotor(refresh_design_sections=True)       # fix 7.55's stale section indices
+d.atmosphere(7.62)
+d.set_sections([...])
+d.design(nblds=4, tip_radius=1.702, hub_radius=0.20, vel=112.0, rpm=1437.0,
+         power=1118550.0, cl=0.5)             # DESI INPU: minimum-induced-loss blade
+d.redesign(nblds=3, cl_root_tip=(0.6, 0.4))   # DESI EDIT
 ```
 
 ## Quick start
@@ -47,7 +55,7 @@ pytest
 
 * **Against the Fortran** (`tests/differential/`): each ported routine is run beside the
   compiled 7.55 routine on randomized inputs (Hypothesis), comparing outputs and COMMON
-  state. Straight-line routines must match exactly; iterative solvers to about 1e-12.
+  state. Everything ported so far matches bit for bit, including the Newton solvers.
 * **Against measurement** (`tests/measurement/`, `validation/`): wind-tunnel data, starting
   with ARC R&M 2357 (Rotol wooden Spitfire IX propeller), at engineering tolerances.
 * **The references themselves** (`tests/reference/`): the library build reproduces the

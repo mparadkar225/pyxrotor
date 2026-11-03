@@ -6,12 +6,15 @@ iterations can diverge through exactly those values, and the port must follow th
 there too, so ported code uses these functions instead of bare operators where a zero
 divisor, overflow, or invalid argument is possible.
 
-MIN/MAX with a NaN argument are unspecified in gfortran (GCC 9 release notes) and depend on
-how each call site compiles. In the reference library, every site tested so far returns the
-*first* argument when either is NaN: MAX(0,NaN) = 0, MIN(NaN,x) = NaN. That is exactly
-Python's built-in min/max (keep the first value unless a later one compares smaller/larger),
-which fmin/fmax spell out. A standalone probe program behaved differently, so only tests
-against the compiled routine itself (test_clcdcm_non_finite) count as evidence.
+MIN/MAX with a NaN argument are unspecified in gfortran. At -O1 on x86-64 each call
+compiles to MINSD/MAXSD, which return their *source* operand when either operand is NaN,
+and which Fortran argument becomes the source varies by call site: a constant or a value
+in memory always does, otherwise it depends on register allocation. So each site is
+checked in the compiled reference with tools/minmax_sites.py and ported with
+    fmin/fmax    NaN -> first argument   (same as Python's built-in min/max)
+    fmin2/fmax2  NaN -> second argument
+e.g. APINIT's MAX(VHSQ,-0.25) returns -0.25 for a NaN VHSQ (fmax2), while CLCDCM's
+MAX(0.0, x) returns 0.0 (fmax). Pin new sites with a non-finite test.
 """
 from __future__ import annotations
 
@@ -82,6 +85,32 @@ def fmin(a: float, b: float) -> float:
     return b if b < a else a
 
 
+def fmax2(a: float, b: float) -> float:
+    """Fortran MAX(A,B) compiled as MAXSD with B as the source operand: NaN -> B."""
+    return a if a > b else b
+
+
+def fmin2(a: float, b: float) -> float:
+    """Fortran MIN(A,B) compiled as MINSD with B as the source operand: NaN -> B."""
+    return a if a < b else b
+
+
 def sign(a: float, b: float) -> float:
     """Fortran SIGN(A,B): |A| with the sign of B (SIGN(1,-0.0) is -1)."""
     return math.copysign(abs(a), b)
+
+
+INT32_MIN = -2**31
+
+
+def ifix(x: float) -> int:
+    """IFIX / INT of a REAL into INTEGER*4: truncation toward zero. On x86-64 gfortran
+    (cvttsd2si) NaN, +-inf and anything outside the INTEGER*4 range give -2**31."""
+    if x != x or not (-2147483649.0 < x < 2147483648.0):
+        return INT32_MIN
+    return int(x)
+
+
+def iwrap(n: int) -> int:
+    """INTEGER*4 arithmetic result wrapped to 32 bits (two's complement, as compiled)."""
+    return (n + 2**31) % 2**32 - 2**31

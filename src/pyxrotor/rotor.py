@@ -13,8 +13,10 @@
 Each method is a port of the corresponding XROTOR routine or OPER command handler,
 with its terminal prompts turned into arguments; the State (r.s) holds everything.
 
-Ported here: INIT, SETDEF, ATMO, ARBI, and the OPER commands ATMO, VELO, ANGL, ADVA, RPM,
-THRU, TORQ, POWE, ITER, INIT (toggle). Not yet: sequences (ASEQ/RSEQ/BSEQ/VSEQ, executed in
+Ported here: INIT, SETDEF, ATMO, ARBI, the OPER commands ATMO, VELO, ANGL, ADVA, RPM,
+THRU, TORQ, POWE, ITER, INIT (toggle), and the DESI commands INPU, EDIT (B, RT, RH, RW, V,
+A, R, T, P, CC, CL), FORM, ITER, N (design, redesign, ...). Not yet: DESI CR/CW/CX (CL from
+file, to file, by cursor), sequences (ASEQ/RSEQ/BSEQ/VSEQ, executed in
 xcasepl.f), PVAR file reading, CPUT/CGET, the xrotor.def file (GETDEF/WDEF).
 """
 from __future__ import annotations
@@ -30,6 +32,7 @@ from .constants import IX, PI
 from .fmath import div
 from .geometry import setx, tinvrt
 from .numerics import seval, spline
+from .design import BetzLimitError, desgen, setcld
 from .oper import aper
 from .state import State
 from .wake import xwinit
@@ -210,10 +213,17 @@ def sections_of(s: State) -> list[AeroSection]:
 
 
 class Rotor:
-    """An XROTOR session. r.s is the State (all COMMON variables)."""
+    """An XROTOR session. r.s is the State (all COMMON variables).
 
-    def __init__(self):
+    refresh_design_sections: False (default) reproduces 7.55, where a design keeps the
+    aero-section indices (IAERO) of the previous radial grid, so with several sections the
+    outer stations extrapolate past the last one (see CLAUDE.md). True assigns sections on
+    the design's own grid (SETIAERO after SETX in DESGEN).
+    """
+
+    def __init__(self, refresh_design_sections: bool = False):
         self.s = startup()
+        self.refresh_design_sections = bool(refresh_design_sections)
 
     # ------------------------------------------------------------- top level / AERO
     def atmosphere(self, alt_km: float) -> None:
@@ -320,6 +330,148 @@ class Rotor:
         """INIT: toggle re-initialization of each analysis case (LOPRINI)."""
         self.s.loprini = not self.s.loprini
         return self.s.loprini
+
+    # ------------------------------------------------------------------- DESI menu
+    def design(self, nblds: int, tip_radius: float, hub_radius: float, vel: float, *,
+               wake_hub_radius: float = 0.0, adv: float | None = None, rpm: float | None = None,
+               thrust: float | None = None, power: float | None = None, cl: float = 0.0,
+               betz_ok: bool = False) -> bool:
+        """DESI INPU (then <Return>): design a minimum-induced-loss rotor.
+
+        Give adv or rpm, and thrust (N) or power (W). cl is the constant design CL; 0 means
+        XROTOR's default, 0.8 with the sign of the thrust or power. Returns CONV.
+        Raises BetzLimitError where XROTOR would ask whether to continue past the Betz
+        windmill limits and betz_ok is False; ValueError where DESGEN rejects the inputs.
+        """
+        s = self.s
+        s.nblds = int(nblds)
+        s.raddes, s.r0des, s.rwdes = float(tip_radius), float(hub_radius), float(wake_hub_radius)
+        s.veldes = float(vel)
+        if (adv is None) == (rpm is None):
+            raise ValueError("give exactly one of adv and rpm")
+        s.advdes = 0.0 if adv is None else float(adv)
+        s.rpmdes = 0.0 if rpm is None else float(rpm)
+        if s.advdes == 0.0 and rpm is None:
+            raise ValueError("adv = 0 prescribes rpm: give rpm instead")
+        if (thrust is None) == (power is None):
+            raise ValueError("give exactly one of thrust and power")
+        s.tddes = 0.0 if thrust is None else float(thrust)
+        s.pddes = 0.0 if power is None else float(power)
+        if s.tddes == 0.0 and s.pddes == 0.0:
+            raise ValueError("thrust or power must be nonzero")      # INPU asks again
+        s.dest = s.tddes != 0.0
+        s.desp = not s.dest
+        s.cldes0 = float(cl)
+        if s.cldes0 == 0.0:
+            cl1 = fm.sign(0.8, s.tddes if s.dest else s.pddes)
+            setcld(s, cl1, cl1)
+        else:
+            setcld(s, s.cldes0, s.cldes0)
+        if s.name == "":
+            s.name = "Designed blade"
+        s.lrotor = False
+        return self._desgen(betz_ok)
+
+    def redesign(self, *, betz_ok: bool = False, **changes) -> bool:
+        """DESI EDIT: change design parameters, then design again (<Return>).
+
+        Keywords, applied in the order given, as the EDIT commands are:
+            nblds (B), tip_radius (RT), hub_radius (RH), wake_hub_radius (RW), vel (V),
+            adv (A; clears rpm), rpm (R; clears adv), thrust (T; design for thrust),
+            power (P; design for power), cl (CC: constant CL),
+            cl_root_tip=(root, tip) (CL: linear in r/R on the *current* grid, as in 7.55).
+        """
+        s = self.s
+        for key, value in changes.items():
+            if key == "nblds":
+                s.nblds = int(value)
+            elif key == "tip_radius":
+                s.raddes = float(value)
+            elif key == "hub_radius":
+                s.r0des = float(value)
+            elif key == "wake_hub_radius":
+                s.rwdes = float(value)
+            elif key == "vel":
+                s.veldes = float(value)
+            elif key == "adv":
+                s.advdes, s.rpmdes = float(value), 0.0
+            elif key == "rpm":
+                s.rpmdes, s.advdes = float(value), 0.0
+            elif key == "thrust":
+                s.tddes, s.dest, s.desp, s.pddes = float(value), True, False, 0.0
+            elif key == "power":
+                s.pddes, s.dest, s.desp, s.tddes = float(value), False, True, 0.0
+            elif key == "cl":
+                s.cldes0 = float(value)
+                setcld(s, s.cldes0, s.cldes0)
+            elif key == "cl_root_tip":
+                clroot, cltip = (float(v) for v in value)
+                setcld(s, clroot, cltip)
+                s.cldes0 = 0.5 * (clroot + cltip)
+            else:
+                raise TypeError(f"unknown design parameter {key!r}")
+        return self._desgen(betz_ok)
+
+    def _desgen(self, betz_ok: bool) -> bool:
+        s = self.s
+        s.ldesini = True                                  # 'HHY added initialization'
+        sec1 = sections_of(s)[0]
+        if not desgen(s, betz_ok=betz_ok, refresh_sections=self.refresh_design_sections):
+            if any(c > sec1.clmax or c < sec1.clmin for c in s.cldes[:s.ii]):
+                raise ValueError(f"design CL is past section 1's stall limits "
+                                 f"({sec1.clmin}, {sec1.clmax})")
+            raise BetzLimitError("disk loading above the ultimate Betz limits "
+                                 "(pass betz_ok=True to design anyway)")
+        return bool(s.conv)
+
+    def design_formulation(self, model: str | None = None, *, toggle_free_wake: bool = False) -> None:
+        """DESI FORM (also OPER FORM): 'grad' (graded momentum), 'pot' (Goldstein potential),
+        'vrtx' (discrete vortex wake); toggle_free_wake is WAKE. As in 7.55, 'vrtx' leaves
+        FAST alone, and graded momentum still wins while FAST is set."""
+        s = self.s
+        if model is not None:
+            m = model.upper()
+            if m == "GRAD":
+                s.vrtx, s.fast = False, True
+            elif m == "POT":
+                s.vrtx, s.fast = False, False
+            elif m == "VRTX":
+                s.vrtx = True
+            else:
+                raise ValueError("model must be 'grad', 'pot' or 'vrtx'")
+        if toggle_free_wake:
+            s.free = not s.free
+
+    def set_design_iterations(self, n: int) -> None:
+        """DESI ITER (prompted form): maximum design iterations NITERD. (In 7.55, ITER with
+        an inline argument, 'ITER 20', sets the OPER limit NITERA instead.)"""
+        self.s.niterd = int(n)
+
+    def set_stations(self, ii: int) -> None:
+        """DESI N: change the number of radial stations, re-splining chord, blade angle,
+        UBODY and the design CL onto the new grid if there is a rotor (LROTOR)."""
+        s = self.s
+        ii = int(ii)
+        if not 1 <= ii <= IX:
+            raise ValueError(f"number of stations must be 1 to {IX}")
+        if s.lrotor:
+            iisav = s.ii
+            w1 = np.array(s.xi[:iisav])
+            w2, w4, w6, w8 = (np.array(a[:iisav]) for a in (s.ch, s.beta, s.ubody, s.cldes))
+            w3, w5, w7, w9 = (spline(w, w1, iisav) for w in (w2, w4, w6, w8))
+        s.ii = ii
+        s.iinf = ii + ii // 2
+        grid = setx(s.ii, s.xi0, s.xitip, s.ixspac)
+        s.dt = grid.dt
+        s.t[:ii], s.xi[:ii], s.dxi[:ii], s.xv[:ii + 1] = grid.t, grid.xi, grid.dxi, grid.xv
+        if s.lrotor:
+            for i in range(ii):
+                x = float(s.xi[i])
+                s.ch[i] = seval(x, w2, w3, w1, iisav)
+                s.beta[i] = seval(x, w4, w5, w1, iisav)
+                s.ubody[i] = seval(x, w6, w7, w1, iisav)
+                s.cldes[i] = seval(x, w8, w9, w1, iisav)
+                s.beta0[i] = s.beta[i]
 
     # --------------------------------------------------------------------- results
     def performance(self) -> dict:
