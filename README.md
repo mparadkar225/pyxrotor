@@ -107,8 +107,11 @@ pytest
 * **Against the Fortran** (`tests/differential/`): each ported routine is run beside the
   compiled 7.55 routine on randomized inputs (Hypothesis), comparing outputs and COMMON
   state. Everything ported so far matches bit for bit, including the Newton solvers.
-* **Against measurement** (`tests/measurement/`, `validation/`): wind-tunnel data, starting
-  with ARC R&M 2357 (Rotol wooden Spitfire IX propeller), at engineering tolerances.
+* **Against measurement** (`tests/measurement/`, `validation/`): wind-tunnel data at
+  engineering tolerances: ARC R&M 2357 (Rotol wooden Spitfire IX propeller) and NACA
+  Report 747 (four-blade single- and dual-rotating propellers, for `RotorPair`). On 747 the
+  counter-rotation peak-efficiency gain matches the test to 0.001 at 45-50° and is about
+  0.01 optimistic at low pitch; see [`validation/naca747`](validation/naca747/README.md).
 * **The references themselves** (`tests/reference/`): the library build reproduces the
   interactive program's results.
 * **New models** (`tests/model/`), which have no Fortran to match: exact limits and
