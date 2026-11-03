@@ -43,7 +43,10 @@ for f in $SRCS; do
 done
 gfortran $F77FLAGS -I"$SRC755/src" -c "$HERE/shim/ref755_shim.f" -o "$OUT/obj755/src/ref755_shim.o"
 
-gfortran -shared -o "$OUT/libxrotor755.so" "$OUT"/obj755/src/*.o "$OUT"/obj755/plotlib/*.o -lX11
+# Link to a temporary name and rename: running tests copy the library at any moment
+# (one private copy per Ref755), and must never see a half-written file.
+gfortran -shared -o "$OUT/libxrotor755.so.tmp" "$OUT"/obj755/src/*.o "$OUT"/obj755/plotlib/*.o -lX11
+mv -f "$OUT/libxrotor755.so.tmp" "$OUT/libxrotor755.so"
 
 # ---------------------------------------------------------------- xrotor-python
 echo "== xrotor-python"

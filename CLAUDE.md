@@ -85,7 +85,8 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
 * Interactive routines (ASKR prompts) can't be called; transcribe them into
   `reference/shim/ref755_shim.f` statement for statement, with prompts turned into arguments,
   and keep fixed-form lines within 72 columns. OPER commands are there as REFVELO, REFRPM, ...
-* `reference/build.sh` must be rerun after editing the shim.
+* `reference/build.sh` must be rerun after editing the shim. It replaces the library atomically,
+  but a long test run started before a rebuild mixes old and new shims: restart it.
 * Fortran output and list-directed input go through `pyxrotor.fortio`, which is tested against
   gfortran (`REFFMT`, `REFRDL`). gfortran rounds ties to even on the exact binary value,
   writes `0.10000+101` for 3-digit exponents, and doesn't write trailing `X` spacing at the
