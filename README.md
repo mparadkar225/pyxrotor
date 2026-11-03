@@ -21,6 +21,7 @@ used as a library and verified routine by routine against the original Fortran.
 | `SAVE`/`LOAD` restart files (7.55 format) | Ported, bit-identical; files byte-identical (old pre-6.9 format not ported) |
 | DESI design (`SETCLD`, `DESINI`, `DEITER`, `DESGEN`) and commands `INPU`, `EDIT`, `FORM`, `ITER`, `N` | Ported, bit-identical (stale-section bug reproduced; fix optional) |
 | MODI | To do |
+| **Beyond XROTOR:** induced-velocity field off the disk (`Rotor.induced_field()`), the base for rotor-rotor interaction | New model, validated against exact limits and an independent discrete vortex wake (`tests/model`) |
 | BEND, NOIS, xrotor.def, PVAR files | To do |
 
 ```python
@@ -92,6 +93,9 @@ pytest
   with ARC R&M 2357 (Rotol wooden Spitfire IX propeller), at engineering tolerances.
 * **The references themselves** (`tests/reference/`): the library build reproduces the
   interactive program's results.
+* **New models** (`tests/model/`), which have no Fortran to match: exact limits and
+  independent methods (closed forms against brute-force Biot-Savart, the averaged field
+  against a discrete helical vortex wake).
 
 See [`reference/README.md`](reference/README.md) for how the references are built.
 

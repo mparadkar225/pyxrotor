@@ -18,6 +18,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "reference: checks the compiled reference libraries themselves")
     config.addinivalue_line("markers", "differential: compares a ported routine with the 7.55 reference")
     config.addinivalue_line("markers", "measurement: compares against wind-tunnel or flight data")
+    config.addinivalue_line("markers", "model: checks new (non-XROTOR) models against exact limits and independent methods")
 
 
 @pytest.fixture

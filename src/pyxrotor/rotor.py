@@ -621,6 +621,16 @@ class Rotor:
             cases_from_lines(self.s, f.read().splitlines(), full_lines)
         return self.s.ncase
 
+    # ------------------------------------------------------------- induced field
+    def induced_field(self):
+        """The circumferentially averaged induced-velocity field of the current solution
+        anywhere in space (pyxrotor.field.InducedField; not part of XROTOR):
+        f.velocity(r, z) -> (axial, radial, swirl) m/s, z positive downstream of the disk."""
+        from .field import InducedField
+        if not self.s.conv:
+            raise ValueError("no converged operating point")
+        return InducedField.from_state(self.s)
+
     # ------------------------------------------------------------- slipstream profiles
     def slipstream_profile(self) -> dict:
         """The slipstream VPUT writes, from the current solution: radius r (m) and the far-

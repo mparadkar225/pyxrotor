@@ -19,6 +19,9 @@ Modules (each a port of the named XROTOR routines, bit-identical to 7.55):
     nacelle    NACELL (NACE), SRCVEL
     slipstream SAVVEL (VPUT), GETVEL (VGET)
     fortio     gfortran formatted output and list-directed input, GETFLT
+
+New models (not in XROTOR, validated in tests/model):
+    field      induced-velocity field of a solved rotor anywhere in space
     oper       TPQ, APINIT, APITER, APER
     induced    VCALC, GRADMO, HELICO, VRTXCO, VORSEGVEL
     wake       UVADD, CSCALC, XWINIT, SETXW

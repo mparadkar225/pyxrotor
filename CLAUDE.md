@@ -183,6 +183,24 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
 * The generic compressibility model (dCD = K (M − Mcrit)^3, local Mach capped at 0.99) is
   very sensitive to Mcrit for transonic tips.
 
+## New models (beyond XROTOR)
+
+Code that isn't a port lives in its own modules (`field.py`, ...), says so in its
+docstring, and is validated in `tests/model/` by exact limits and independent methods,
+never only by its own derivation. Keep XROTOR's conventions and quantities where they meet
+(e.g. `InducedField` reproduces VPUT's disk averages exactly).
+
+* `field.InducedField`: circumferentially averaged induced velocity of XROTOR's rigid
+  helical wake anywhere in space. Swirl is exact by Stokes' theorem (zero ahead of the
+  disk). Axial and radial velocities come from semi-infinite vortex cylinders (Branlard &
+  Gaunaa 2015). Elliptic integrals use Carlson's forms in NumPy; the closed forms of R_C
+  lose precision as x -> y, which broke R_J until R_C used duplication. No wake
+  contraction yet.
+* Measured with it on the Rotol blade: 0.2 R ahead of a disk the axial induced velocity is
+  0.59-0.84 of the disk value (least at mid-span), well below the on-axis actuator-disk
+  estimate. 0.2 R behind, only 0.58-0.71 of the far-wake value has developed, so VGET with
+  weight 1 overstates a close rear rotor's inflow.
+
 ## Licensing
 
 GPL v3 or later (XROTOR is GPL v2 or later; xrotor-python is GPL v3).
