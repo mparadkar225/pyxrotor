@@ -144,6 +144,16 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
   SAVE asks on stdin before overwriting, and LOAD asks on stdin when the file's station
   count differs from II. In tests, use short, fresh paths and feed prompts with
   `test_restart.fortran_stdin`.
+* **NACELL's sources are shifted one interval downstream.** The "HHY FIX" sets source
+  strengths from area changes, but SOURCE(i) = A(i) - A(i-1) is placed at the midpoint of
+  interval i. So the first interval gets no source and the last interval's change is
+  dropped. On a P-51-like spinner this makes the root UBODY -0.199 instead of -0.146 (fix:
+  `nacelle(..., fix_source_positions=True)`; the shim's `REFNACELL(U, LFIXSRC)` is the
+  oracle). NACE CONST also sets XW0 = 0. A bad number in the file zeroes UBODY but leaves
+  VBODY and XW0 unchanged. An empty file stops XROTOR (READ without END=).
+* **OPER ADW sets the factor ADWFCTR**, not ADW: the free-wake condition is
+  ADWFCTR·ADW·Twake/Pwake = ADV. It has no effect with a rigid wake, and a free-wake DESI
+  design resets it to 1.
 * **DESI fails** (GETALF inversion, NaN wake) when the helical tip Mach number reaches about 1.
 * The generic compressibility model (dCD = K (M − Mcrit)^3, local Mach capped at 0.99) is
   very sensitive to Mcrit for transonic tips.

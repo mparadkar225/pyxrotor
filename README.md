@@ -16,6 +16,7 @@ used as a library and verified routine by routine against the original Fortran.
 | OPER solver (`TPQ`, `APINIT`, `APITER`, `APER`) and wake geometry | Ported, bit-identical |
 | OPER commands: `VELO`, `ANGL`, `ADVA`, `RPM`, `THRU`, `TORQ`, `POWE` (fix pitch or rpm), engine power line | Ported, bit-identical |
 | Sweeps (`ASEQ`, `RSEQ`, `BSEQ`, `VSEQ`: `SETCAS` plus `CASPLT`'s solves), case table (`ADDC`, `CLRC`, `CASE`, `CPUT`, `CGET`) | Ported, bit-identical; files byte-identical |
+| Nacelle/spinner body (`NACE`: `NACELL`, `SRCVEL`), OPER `ADW` factor | Ported, bit-identical (source-position bug reproduced; fix optional) |
 | `SAVE`/`LOAD` restart files (7.55 format) | Ported, bit-identical; files byte-identical (old pre-6.9 format not ported) |
 | DESI design (`SETCLD`, `DESINI`, `DEITER`, `DESGEN`) and commands `INPU`, `EDIT`, `FORM`, `ITER`, `N` | Ported, bit-identical (stale-section bug reproduced; fix optional) |
 | MODI | To do |
@@ -46,6 +47,8 @@ d.sweep_advance_ratio(0.3, 1.2, 0.1)          # ASEQ (appends, like XROTOR; clea
 d.write_cases("p51.cas")                      # CPUT
 d.save("p51.xr")                              # SAVE: readable by XROTOR 7.55
 r2 = Rotor(); r2.load("p51.xr")               # LOAD: XROTOR's own .xr files too
+r2.nacelle("spinner.nac")                     # NACE: body area file -> UBODY at the blades
+r2.nacelle(z=[0, 0.5, 1.0], area=[-0.1, -0.35, -0.45], rotor_z=0.15, wake_area=-0.3)
 ```
 
 ## Quick start

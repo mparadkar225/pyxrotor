@@ -16,7 +16,8 @@ with its terminal prompts turned into arguments; the State (r.s) holds everythin
 Ported here: INIT, SETDEF, ATMO, ARBI, the OPER commands ATMO, VELO, ANGL, ADVA, RPM,
 THRU, TORQ, POWE, ITER, INIT (toggle), and the DESI commands INPU, EDIT (B, RT, RH, RW, V,
 A, R, T, P, CC, CL), FORM, ITER, N (design, redesign, ...), the OPER sweeps ASEQ, RSEQ,
-BSEQ, VSEQ and case commands ADDC, CLRC, CASE, CPUT, CGET, and top-level SAVE and LOAD.
+BSEQ, VSEQ, ADW and case commands ADDC, CLRC, CASE, CPUT, CGET, and top-level SAVE, LOAD
+and NACE.
 Not yet: DESI CR/CW/CX (CL from file, to file, by cursor), sequences (ASEQ/RSEQ/BSEQ/VSEQ, executed in
 xcasepl.f) are ported here; still missing: PVAR file reading, CPUT/CGET, the xrotor.def file (GETDEF/WDEF).
 """
@@ -473,6 +474,42 @@ class Rotor:
                 s.ubody[i] = seval(x, w6, w7, w1, iisav)
                 s.cldes[i] = seval(x, w8, w9, w1, iisav)
                 s.beta0[i] = s.beta[i]
+
+    def set_wake_advance_factor(self, factor: float) -> None:
+        """OPER ADW: the factor ADWFCTR in the free-wake condition ADWFCTR*ADW*Twake/Pwake =
+        ADV, so the converged wake advance ratio ADW scales by 1/factor (default 1). Used
+        only with a free (self-deforming) wake. A free-wake DESI design resets it to 1."""
+        self.s.adwfctr = float(factor)
+
+    # ------------------------------------------------------------------ nacelle
+    def nacelle(self, path=None, *, rotor_z: float | None = None, wake_area: float | None = None,
+                z=None, area=None, constant_ubody: float | None = None,
+                fix_source_positions: bool = False) -> bool:
+        """NACE: nacelle/spinner perturbation velocities UBODY, VBODY at the blade stations.
+
+        Give one of:
+          * path: an XROTOR body file (first record 'zprop awake', then 'z area' records;
+            a name starting with CONST sets a constant UBODY = constant_ubody, default 0);
+          * z, area (m, m^2; negative area = radius), with rotor_z and wake_area (negative
+            = radius) as in the file's first record;
+          * constant_ubody alone: NACE CONST (7.55 also sets the wake hub radius XW0 to 0).
+        fix_source_positions=True corrects 7.55's one-interval shift of the source strengths.
+        Returns False where 7.55 reports a file error (UBODY is then set to 0).
+        """
+        from . import nacelle as nac
+        s = self.s
+        if path is not None:
+            return nac.nacelle(s, path, ubody=constant_ubody or 0.0,
+                               fix_source_positions=fix_source_positions)
+        if z is not None:
+            if rotor_z is None or wake_area is None:
+                raise ValueError("give rotor_z and wake_area with z and area")
+            nac.body_velocities(s, rotor_z, wake_area, z, area, fix_source_positions)
+            return True
+        if constant_ubody is not None:
+            nac.constant_ubody(s, constant_ubody)
+            return True
+        raise ValueError("give a file path, body stations (z, area), or constant_ubody")
 
     # ------------------------------------------------------------- OPER case sweeps
     def _sweep(self, itype: int, first, last, step, **opts) -> list[dict]:

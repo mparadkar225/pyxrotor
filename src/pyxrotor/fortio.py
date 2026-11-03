@@ -255,3 +255,32 @@ def getflt(text: str, nmax: int = 0, limit: int = 128) -> tuple[list[float], boo
     except ValueError:
         return [], True
     return [0.0 if v is None else v for v in vals], False
+
+
+class ListReader:
+    """Successive list-directed READs from a formatted sequential file: each READ starts at
+    the next record and continues onto following records until it has all its items; the
+    rest of its last record is skipped. read() raises EOFError (END) or ValueError (ERR)."""
+
+    def __init__(self, text: str):
+        self.recs = text.splitlines()
+        self.k = 0
+
+    def read(self, kinds: str) -> list:
+        vals: list = []
+        while len(vals) < len(kinds):
+            if self.k >= len(self.recs):
+                raise EOFError("end of file")
+            rec = self.recs[self.k]
+            self.k += 1
+            need = kinds[len(vals):]
+            toks = _tokens(rec)
+            if "/" in rec and len(toks) < len(need):           # '/' ends the READ
+                vals += [None] * (len(need) - len(toks))
+                toks = toks + [None] * (len(need) - len(toks))
+            for kind, t in zip(need, toks):
+                if t is None:
+                    vals.append(None)
+                else:
+                    vals.append(_real(t) if kind == "r" else _integer(t) if kind == "i" else _logical(t))
+        return vals

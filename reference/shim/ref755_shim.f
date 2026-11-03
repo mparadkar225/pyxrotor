@@ -799,3 +799,91 @@ C---- station count differs from II)
       CALL LOAD(F)
       RETURN
       END ! REFLOAD
+
+
+
+      SUBROUTINE REFNACELL(UCONSIN,LFIXSRC)
+C-----------------------------------------------------------------------
+C     Top-level NACE (NACELL, xrotor.f) on the file named in COMMON
+C     FNAME, with the 'Enter constant Ubody' prompt answered by UCONSIN
+C     and the plot (NACPLT) removed.
+C     LFIXSRC (not in 7.55): put each source at the midpoint of the
+C     interval whose area change it represents.
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      CHARACTER     FNTEMP*80
+      LOGICAL LFIXSRC
+      PARAMETER (IZX=200)
+      DIMENSION ABODY(IZX), ZBODY(IZX), RBODY(IZX), SOURCE(IZX)
+C
+      GREEK = .FALSE.
+      LU = LUTEMP
+      IF(RAD.EQ.0.0) RETURN
+C
+      FNTEMP = FNAME
+      CALL LC2UC(FNTEMP)
+      IF(FNTEMP(1:5).EQ.'CONST') THEN
+        UCONS = 0.0
+        VCONS = 0.0
+        UCONS = UCONSIN
+        DO I=1, II
+          UBODY(I) = UCONS
+          VBODY(I) = VCONS
+        END DO
+        ZPROP = 0.0
+        AWAKE = 0.0
+        NZ = 2
+        ZBODY(1) = 0.0
+        ABODY(1) = 0.0
+        ZBODY(2) = 1.0
+        ABODY(2) = 0.0
+        GO TO 20
+      ELSE
+      OPEN(LU,FILE=FNAME,STATUS='OLD',ERR=80)
+      READ(LU,*,ERR=90) ZPROP, AWAKE
+      IF(AWAKE .LT. 0.0) AWAKE = PI*AWAKE**2
+      DO K=1, IZX
+        READ(LU,*,END=11,ERR=90) ZBODY(K), ABODY(K)
+        IF(ABODY(K) .LT. 0.0) ABODY(K) = PI*ABODY(K)**2
+      END DO
+   11 NZ = K-1
+      CLOSE(LU)
+      ENDIF
+C
+      ZPROP = ZPROP/RAD
+      AWAKE = AWAKE/RAD**2
+      DO K=1, NZ
+        ZBODY(K) = ZBODY(K)/RAD    - ZPROP
+        ABODY(K) = ABODY(K)/RAD**2
+        RBODY(K) = SQRT( ABODY(K)/PI )
+      END DO
+C
+      SOURCE(1) = 0.0
+      DO I=2, NZ
+        SOURCE(I) = ABODY(I) - ABODY(I-1)
+      END DO
+      IF(LFIXSRC) THEN
+        DO I=1, NZ-1
+          SOURCE(I) = ABODY(I+1) - ABODY(I)
+        END DO
+      ENDIF
+C
+      DO I=1, II
+        CALL SRCVEL(NZ,ZBODY,SOURCE, 0.0,XI(I),UBODY(I),VBODY(I))
+      ENDDO
+C
+ 20   XW0 = SQRT(AWAKE/PI)
+      CALL XWINIT
+      CONV = .FALSE.
+      RETURN
+C
+   80 DO 85 I=1, II
+        UBODY(I) = 0.
+   85 CONTINUE
+      RETURN
+C
+   90 DO 95 I=1, II
+        UBODY(I) = 0.
+   95 CONTINUE
+      RETURN
+      END ! REFNACELL
