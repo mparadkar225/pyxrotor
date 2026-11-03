@@ -15,10 +15,11 @@ used as a library and verified routine by routine against the original Fortran.
 | Induced velocity: graded momentum, potential (Goldstein), discrete vortex wake | Ported, bit-identical |
 | OPER solver (`TPQ`, `APINIT`, `APITER`, `APER`) and wake geometry | Ported, bit-identical |
 | OPER commands: `VELO`, `ANGL`, `ADVA`, `RPM`, `THRU`, `TORQ`, `POWE` (fix pitch or rpm), engine power line | Ported, bit-identical |
-| Sweeps (`ASEQ`, `RSEQ`, `BSEQ`, `VSEQ`; executed in xcasepl.f), case files | Next |
+| Sweeps (`ASEQ`, `RSEQ`, `BSEQ`, `VSEQ`: `SETCAS` plus `CASPLT`'s solves), case table (`ADDC`, `CLRC`, `CASE`, `CPUT`, `CGET`) | Ported, bit-identical; files byte-identical |
+| `SAVE`/`LOAD` restart files (7.55 format) | Ported, bit-identical; files byte-identical (old pre-6.9 format not ported) |
 | DESI design (`SETCLD`, `DESINI`, `DEITER`, `DESGEN`) and commands `INPU`, `EDIT`, `FORM`, `ITER`, `N` | Ported, bit-identical (stale-section bug reproduced; fix optional) |
 | MODI | To do |
-| BEND, NOIS, restart files | To do |
+| BEND, NOIS, xrotor.def, PVAR files | To do |
 
 ```python
 from pyxrotor import Rotor, AeroSection
@@ -39,6 +40,12 @@ d.set_sections([...])
 d.design(nblds=4, tip_radius=1.702, hub_radius=0.20, vel=112.0, rpm=1437.0,
          power=1118550.0, cl=0.5)             # DESI INPU: minimum-induced-loss blade
 d.redesign(nblds=3, cl_root_tip=(0.6, 0.4))   # DESI EDIT
+
+d.sweep_velocity(60.0, 140.0, 10.0, constant_speed=True)   # VSEQ: list of case dicts
+d.sweep_advance_ratio(0.3, 1.2, 0.1)          # ASEQ (appends, like XROTOR; clear_cases())
+d.write_cases("p51.cas")                      # CPUT
+d.save("p51.xr")                              # SAVE: readable by XROTOR 7.55
+r2 = Rotor(); r2.load("p51.xr")               # LOAD: XROTOR's own .xr files too
 ```
 
 ## Quick start

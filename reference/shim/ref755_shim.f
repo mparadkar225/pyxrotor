@@ -354,3 +354,448 @@ C
       ENDIF
       RETURN
       END ! REFDESN
+
+
+
+      SUBROUTINE REFFMT(IFMT,X,IW,ID)
+C-----------------------------------------------------------------------
+C     Formatted write of X into COMMON FNAME, for testing pyxrotor's
+C     Fortran output: IFMT 1 Gw.d, 2 Ew.d, 3 Fw.d, 4 Iw (of INT(X)).
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      CHARACTER*20 F
+      IF(IFMT.EQ.1) WRITE(F,'(''(G'',I2,''.'',I2,'')'')') IW, ID
+      IF(IFMT.EQ.2) WRITE(F,'(''(E'',I2,''.'',I2,'')'')') IW, ID
+      IF(IFMT.EQ.3) WRITE(F,'(''(F'',I2,''.'',I2,'')'')') IW, ID
+      IF(IFMT.EQ.4) WRITE(F,'(''(I'',I2,'')'')') IW
+      FNAME = ' '
+      IF(IFMT.LE.3) WRITE(FNAME,F) X
+      IF(IFMT.EQ.4) WRITE(FNAME,F) INT(X)
+      RETURN
+      END ! REFFMT
+
+
+
+      SUBROUTINE REFRDL(N,A,IERR)
+C-----------------------------------------------------------------------
+C     List-directed READ of N reals from COMMON FNAME (IERR=1: error).
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      DIMENSION A(*)
+      IERR = 1
+      READ(FNAME,*,ERR=10,END=10) (A(I),I=1,N)
+      IERR = 0
+ 10   RETURN
+      END ! REFRDL
+
+
+
+      SUBROUTINE REFGETFLT(A,N,IERR)
+C-----------------------------------------------------------------------
+C     GETFLT on COMMON FNAME (N in: max count, 0 = all; out: count).
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      DIMENSION A(*)
+      LOGICAL ERROR
+      CALL GETFLT(FNAME,A,N,ERROR)
+      IERR = 0
+      IF(ERROR) IERR = 1
+      RETURN
+      END ! REFGETFLT
+
+
+
+      SUBROUTINE REFSETCAS(ITYPE,R1,R2,R3,YESIN,IANS,CSIN,RPMIN,
+     &                     LPIN,PIN)
+C-----------------------------------------------------------------------
+C     SETCAS (xoper.f) with first, last, increment given (NINPUT = 3)
+C     and its prompts answered by arguments:
+C       YESIN  'Use engine rpm/power line ?' (asked only if LPWRVAR)
+C       IANS   RSEQ 'Fix power P or thrust T or blade pitch A ?':
+C              0 A (or anything else), 1 T, 2 Q, 3 P
+C       CSIN   VSEQ: .TRUE. constant-speed (CS), .FALSE. fixed (FP)
+C       RPMIN  VSEQ CS rpm; 0 keeps the prompt's default
+C       LPIN,PIN  VSEQ CS power; LPIN .FALSE. keeps the default
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      LOGICAL YES, YESIN, CSIN, LPIN
+      CHARACTER*1 ANS, ANS4*4
+C
+      KCASE = 0
+C
+      IF(ITYPE.EQ.1) THEN
+        KCASE = 1
+        ADV1 = R1
+        ADV2 = R2
+        DADV = R3
+        IF(ADV1.EQ.ADV2) RETURN
+        DADV = SIGN(DADV,ADV2-ADV1)
+        NP = 1
+        IF(DADV .NE. 0.0) NP = INT((ADV2-ADV1)/DADV + 0.5) + 1
+        IF(NP.LE.0) RETURN
+        YES = .FALSE.
+        XANS = 0.
+        IF(LPWRVAR) YES = YESIN
+        IF(YES) XANS = 100.0
+        IF(NCASE+NP .GT. ICASX) THEN
+         NP = ICASX - NCASE
+        ENDIF
+        DO IP=1, NP
+          NCASE = NCASE + 1
+          CASPAR(0,NCASE) = XANS + FLOAT(KCASE)
+          CASPAR(1,NCASE) = ADV1 + DADV*FLOAT(IP-1)
+          CASPAR(2,NCASE) = VEL
+          CASPAR(3,NCASE) = BETA(II)
+          CASPAR(4,NCASE) = ALT
+          CASPAR(5,NCASE) = RHO
+          CASPAR(6,NCASE) = RMU
+          CASPAR(7,NCASE) = VSO
+          CASPAR(8,NCASE) = 999.
+          CASPAR(9,NCASE) = 999.
+          CASPAR(10,NCASE)= 999.
+          CASPAR(11,NCASE)= 999.
+        ENDDO
+C
+      ELSEIF(ITYPE.EQ.2) THEN
+        KCASE = 2
+        RPM1 = R1
+        RPM2 = R2
+        DRPM = R3
+        IF(RPM1.EQ.RPM2) RETURN
+        DRPM = SIGN(DRPM,RPM2-RPM1)
+        NP = 1
+        IF(DRPM .NE. 0.0) NP = INT((RPM2-RPM1)/DRPM + 0.5) + 1
+        IF(NP.LE.0) RETURN
+        YES = .FALSE.
+        XANS = 0.
+        IF(LPWRVAR) YES = YESIN
+        IF(YES) XANS = 100.0
+        ANS = ' '
+        IF(IANS.EQ.1) ANS = 'T'
+        IF(IANS.EQ.2) ANS = 'Q'
+        IF(IANS.EQ.3) ANS = 'P'
+        IF(ANS.EQ.'T') XANS = XANS + 1000.0
+        IF(ANS.EQ.'Q') XANS = XANS + 2000.0
+        IF(ANS.EQ.'P') XANS = XANS + 3000.0
+        IF(NCASE+NP .GT. ICASX) THEN
+         NP = ICASX - NCASE
+        ENDIF
+        DO IP=1, NP
+          NCASE = NCASE + 1
+          RPM = RPM1 + DRPM*FLOAT(IP-1)
+          CASPAR(0,NCASE) = XANS + FLOAT(KCASE)
+          CASPAR(1,NCASE) = VEL/(RPM*RAD) * 30.0/PI
+          CASPAR(2,NCASE) = VEL
+          CASPAR(3,NCASE) = BETA(II)
+          CASPAR(4,NCASE) = ALT
+          CASPAR(5,NCASE) = RHO
+          CASPAR(6,NCASE) = RMU
+          CASPAR(7,NCASE) = VSO
+          CASPAR(8,NCASE) = 999.
+          CASPAR(9,NCASE) = 999.
+          CASPAR(10,NCASE)= 999.
+          CASPAR(11,NCASE)= 999.
+        ENDDO
+C
+      ELSEIF(ITYPE.EQ.3) THEN
+        KCASE = 3
+        BET1 = R1
+        BET2 = R2
+        DBET = R3
+        IF(BET1.EQ.BET2) RETURN
+        DBET = SIGN(DBET,BET2-BET1)
+        NP = 1
+        IF(DBET .NE. 0.0) NP = INT((BET2-BET1)/DBET + 0.5) + 1
+        IF(NP.LE.0) RETURN
+        YES = .FALSE.
+        XANS = 0.
+        IF(LPWRVAR) YES = YESIN
+        IF(YES) XANS = 100.0
+        IF(NCASE+NP .GT. ICASX) THEN
+         NP = ICASX - NCASE
+        ENDIF
+        DO IP=1, NP
+          NCASE = NCASE + 1
+          BET = BET1 + DBET*FLOAT(IP-1)
+          CASPAR(0,NCASE) = XANS + FLOAT(KCASE)
+          CASPAR(1,NCASE) = ADV
+          CASPAR(2,NCASE) = VEL
+          CASPAR(3,NCASE) = BET * PI/180.0
+          CASPAR(4,NCASE) = ALT
+          CASPAR(5,NCASE) = RHO
+          CASPAR(6,NCASE) = RMU
+          CASPAR(7,NCASE) = VSO
+          CASPAR(8,NCASE) = 999.
+          CASPAR(9,NCASE) = 999.
+          CASPAR(10,NCASE)= 999.
+          CASPAR(11,NCASE)= 999.
+        ENDDO
+C
+      ELSEIF(ITYPE.EQ.4) THEN
+        KCASE = 4
+        VEL1 = R1
+        VEL2 = R2
+        DVEL = R3
+        IF(VEL1.EQ.VEL2) RETURN
+        DVEL = SIGN(DVEL,VEL2-VEL1)
+        NP = 1
+        IF(DVEL .NE. 0.0) NP = INT((VEL2-VEL1)/DVEL + 0.5) + 1
+        IF(NP.LE.0) RETURN
+        YES = .FALSE.
+        XANS = 0.
+        IF(LPWRVAR) YES = YESIN
+        IF(YES) XANS = 100.0
+        ANS4 = 'FP'
+        IF(CSIN) ANS4 = 'CS'
+        IF(ANS4.EQ.'CS') THEN
+          RPM  = VEL/(RAD*ADV*PI/30.)
+          IF(RPMIN.NE.0.0) RPM = RPMIN
+          ADV = VEL / (RAD*RPM*PI/30.)
+          KCASE = 5
+          IF(XANS.NE.100.0) THEN
+            IF(PSPEC.LE.0.0 .AND. PTOT.GT.0.0) 
+     &         PSPEC = PTOT * (RHO*VEL**3*RAD**2)
+            IF(LPIN) PSPEC = PIN
+          ENDIF
+        ENDIF
+        IF(NCASE+NP .GT. ICASX) THEN
+         NP = ICASX - NCASE
+        ENDIF
+        DO IP=1, NP
+          NCASE = NCASE + 1
+          VVEL  = VEL1 + DVEL*FLOAT(IP-1)
+          CASPAR(0,NCASE) = XANS + FLOAT(KCASE)
+          CASPAR(1,NCASE) = VVEL * ADV/VEL
+          CASPAR(2,NCASE) = VVEL
+          CASPAR(3,NCASE) = BETA(II)
+          CASPAR(4,NCASE) = ALT
+          CASPAR(5,NCASE) = RHO
+          CASPAR(6,NCASE) = RMU
+          CASPAR(7,NCASE) = VSO
+          CASPAR(8,NCASE) = 999.
+          CASPAR(9,NCASE) = 999.
+          CASPAR(10,NCASE)= 999.
+          CASPAR(11,NCASE)= 999.
+        ENDDO
+      ENDIF
+      RETURN
+      END ! REFSETCAS
+
+
+
+      SUBROUTINE REFCASRUN
+C-----------------------------------------------------------------------
+C     The computing part of CASPLT (xcasepl.f), plotting removed:
+C     solve every stored case, then restore and re-solve the current
+C     operating point. Scratch W1-W4 (plot data) are not filled.
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      DIMENSION BETSAV(IX), BET0SAV(IX)
+C
+      IF(NCASE.EQ.0) RETURN
+C
+      ADVSAV = ADV
+      VELSAV = VEL
+      ALTSAV = ALT
+      RHOSAV = RHO
+      VSOSAV = VSO
+      RMUSAV = RMU
+      DO I=1, II
+        BETSAV(I)  = BETA(I)
+        BET0SAV(I) = BETA0(I)
+      ENDDO
+C
+      DO 10 ICASE=1, NCASE
+        ITQP = IFIX(CASPAR(0,ICASE)/1000.0)
+        IPWR = IFIX(CASPAR(0,ICASE)/100.0) - 10*ITQP
+        ITYP = IFIX(CASPAR(0,ICASE)) - 100*IPWR - 1000*ITQP
+        ADV = CASPAR(1,ICASE)
+        VEL = CASPAR(2,ICASE)
+        BET = CASPAR(3,ICASE)
+        ALT = CASPAR(4,ICASE)
+        RHO = CASPAR(5,ICASE)
+        RMU = CASPAR(6,ICASE)
+        VSO = CASPAR(7,ICASE)
+C
+        DELB = BET - BETSAV(II)
+        DO I=1, II
+          BETA(I)  = BETSAV(I)  + DELB
+          BETA0(I) = BET0SAV(I) + DELB
+        ENDDO
+C
+        CONV = .FALSE.
+        IF(IPWR.EQ.0) THEN
+          IF(ITYP.NE.5) THEN
+            CALL APER(4,2,.TRUE.)
+           ELSE
+            CALL APER(3,1,.TRUE.)
+          ENDIF
+C
+          IF(ITYP.EQ.1) THEN
+            CALL APER(4,2,.TRUE.)
+          ELSEIF(ITYP.EQ.2) THEN
+            IF(ITQP.EQ.1) THEN
+             CALL APER(1,1,.TRUE.)
+            ELSEIF(ITQP.EQ.2) THEN
+             CALL APER(2,1,.TRUE.)
+            ELSEIF(ITQP.EQ.3) THEN
+             CALL APER(3,1,.TRUE.)
+            ELSE
+             CALL APER(4,2,.TRUE.)
+            ENDIF
+          ELSEIF(ITYP.EQ.3) THEN
+           CALL APER(4,2,.TRUE.)
+          ELSEIF(ITYP.EQ.4) THEN
+           CALL APER(4,2,.TRUE.)
+          ELSEIF(ITYP.EQ.5) THEN
+           CALL APER(3,1,.TRUE.)
+          ENDIF
+         ELSE
+          IF(ITYP.EQ.1) THEN
+             CALL APER(5,1,.TRUE.)
+           ELSEIF(ITYP.EQ.2) THEN
+             CALL APER(5,1,.TRUE.)
+           ELSEIF(ITYP.EQ.3) THEN
+             CALL APER(5,2,.TRUE.)
+           ELSEIF(ITYP.EQ.4) THEN
+             CALL APER(5,2,.TRUE.)
+           ELSEIF(ITYP.EQ.5) THEN
+             CALL APER(5,1,.TRUE.)
+          ENDIF
+        ENDIF
+C
+        CASPAR(1,ICASE) = ADV
+        CASPAR(3,ICASE) = BETA(II)
+        IF(CONV) THEN
+         CASPAR(8,ICASE) = PTOT*RHO*VEL**3*RAD**2
+         CASPAR(9,ICASE) = TTOT*RHO*VEL**2*RAD**2
+         CASPAR(10,ICASE)= QTOT*RHO*VEL**2*RAD**3
+         CASPAR(11,ICASE)= TTOT/PTOT
+        ELSE
+         CASPAR(8,ICASE) = 999.
+         CASPAR(9,ICASE) = 999.
+         CASPAR(10,ICASE)= 999.
+         CASPAR(11,ICASE)= 999.
+        ENDIF
+   10 CONTINUE
+C
+      ADV = ADVSAV
+      VEL = VELSAV
+      ALT = ALTSAV
+      VSO = VSOSAV
+      RHO = RHOSAV
+      RMU = RMUSAV
+      DO I=1, II
+        BETA(I) = BETSAV(I)
+        BETA0(I) = BET0SAV(I)
+      ENDDO
+      CONV = .FALSE.
+      CALL APER(4,2,.TRUE.)
+      RETURN
+      END ! REFCASRUN
+
+
+
+      SUBROUTINE REFADDC
+C---- OPER ADDC (xoper.f)
+      INCLUDE 'XROTOR.INC'
+      IF(NCASE.GE.ICASX) RETURN
+      NCASE = NCASE+1
+      CASPAR(1,NCASE) = ADV
+      CASPAR(2,NCASE) = VEL
+      CASPAR(3,NCASE) = BETA(II)
+      CASPAR(4,NCASE) = ALT
+      CASPAR(5,NCASE) = RHO
+      CASPAR(6,NCASE) = RMU
+      CASPAR(7,NCASE) = VSO
+      CASPAR(8,NCASE) = 999.
+      CASPAR(9,NCASE) = 999.
+      CASPAR(10,NCASE)= 999.
+      CASPAR(11,NCASE)= 999.
+      RETURN
+      END ! REFADDC
+
+
+
+      SUBROUTINE REFCASE(ICASE)
+C---- OPER CASE i (xoper.f): rerun stored case ICASE
+      INCLUDE 'XROTOR.INC'
+      IF(NCASE.LE.0) RETURN
+      IF(ICASE.LE.0 .OR. ICASE.GT.NCASE) RETURN
+C
+      ADV = CASPAR(1,ICASE)
+      VEL = CASPAR(2,ICASE)
+      BET = CASPAR(3,ICASE)
+      ALT = CASPAR(4,ICASE)
+      RHO = CASPAR(5,ICASE)
+      RMU = CASPAR(6,ICASE)
+      VSO = CASPAR(7,ICASE)
+      POW = CASPAR(8,ICASE)
+      THR = CASPAR(9,ICASE)
+      TRQ = CASPAR(10,ICASE)
+      EFF = CASPAR(11,ICASE)
+C
+      DELB = BET - BETA(II)
+      DO I=1, II
+        BETA(I)  = BETA(I)  + DELB
+        BETA0(I) = BETA0(I) + DELB
+      ENDDO
+C
+      CONV = .FALSE.
+      CALL APER(4,2,.TRUE.)
+C
+      IF(CONV) THEN
+       CASPAR(8,ICASE) = PTOT*RHO*VEL**3*RAD**2
+       CASPAR(9,ICASE) = TTOT*RHO*VEL**2*RAD**2
+       CASPAR(10,ICASE)= QTOT*RHO*VEL**2*RAD**3
+       CASPAR(11,ICASE)= TTOT/PTOT
+      ENDIF
+      RETURN
+      END ! REFCASE
+
+
+
+      SUBROUTINE REFCPUT
+C---- OPER CPUT f: case table to file FNAME (new file; no prompt)
+      INCLUDE 'XROTOR.INC'
+      LU = 12
+      OPEN(LU,FILE=FNAME,STATUS='UNKNOWN')
+      CALL SHOCAS(LU,NPARX,NCASE,CASPAR,RAD,NAME)
+      CLOSE(LU)
+      RETURN
+      END ! REFCPUT
+
+
+
+      SUBROUTINE REFCGET
+C---- OPER CGET f: case table from file FNAME
+      INCLUDE 'XROTOR.INC'
+      LU = 12
+      OPEN(LU,FILE=FNAME,STATUS='OLD')
+      CALL GETCAS(LU,NPARX,NCASE,CASPAR)
+      CLOSE(LU)
+      RETURN
+      END ! REFCGET
+
+
+
+      SUBROUTINE REFSAVE
+C---- top-level SAVE to FNAME (must not exist: SAVE prompts otherwise)
+      INCLUDE 'XROTOR.INC'
+      CHARACTER*80 F
+      F = FNAME
+      CALL SAVE(F)
+      RETURN
+      END ! REFSAVE
+
+
+
+      SUBROUTINE REFLOAD
+C---- top-level LOAD from FNAME (prompts on stdin if the file's
+C---- station count differs from II)
+      INCLUDE 'XROTOR.INC'
+      CHARACTER*80 F
+      F = FNAME
+      CALL LOAD(F)
+      RETURN
+      END ! REFLOAD

@@ -15,9 +15,10 @@ with its terminal prompts turned into arguments; the State (r.s) holds everythin
 
 Ported here: INIT, SETDEF, ATMO, ARBI, the OPER commands ATMO, VELO, ANGL, ADVA, RPM,
 THRU, TORQ, POWE, ITER, INIT (toggle), and the DESI commands INPU, EDIT (B, RT, RH, RW, V,
-A, R, T, P, CC, CL), FORM, ITER, N (design, redesign, ...). Not yet: DESI CR/CW/CX (CL from
-file, to file, by cursor), sequences (ASEQ/RSEQ/BSEQ/VSEQ, executed in
-xcasepl.f), PVAR file reading, CPUT/CGET, the xrotor.def file (GETDEF/WDEF).
+A, R, T, P, CC, CL), FORM, ITER, N (design, redesign, ...), the OPER sweeps ASEQ, RSEQ,
+BSEQ, VSEQ and case commands ADDC, CLRC, CASE, CPUT, CGET, and top-level SAVE and LOAD.
+Not yet: DESI CR/CW/CX (CL from file, to file, by cursor), sequences (ASEQ/RSEQ/BSEQ/VSEQ, executed in
+xcasepl.f) are ported here; still missing: PVAR file reading, CPUT/CGET, the xrotor.def file (GETDEF/WDEF).
 """
 from __future__ import annotations
 
@@ -472,6 +473,107 @@ class Rotor:
                 s.ubody[i] = seval(x, w6, w7, w1, iisav)
                 s.cldes[i] = seval(x, w8, w9, w1, iisav)
                 s.beta0[i] = s.beta[i]
+
+    # ------------------------------------------------------------- OPER case sweeps
+    def _sweep(self, itype: int, first, last, step, **opts) -> list[dict]:
+        from . import cases
+        added = cases.setcas(self.s, itype, first, last, step, **opts)
+        cases.run_cases(self.s)                        # CASPLT: solves *all* stored cases
+        return self.cases()[-added:] if added else []
+
+    def sweep_advance_ratio(self, first: float, last: float, step: float, *,
+                            engine_line: bool = False) -> list[dict]:
+        """ASEQ: a sequence of advance ratios at the current blade angle.
+
+        As in 7.55, new cases are appended to the stored ones and every stored case is
+        re-solved (clear_cases() first for a fresh table); afterwards the original operating
+        point is restored and solved again. Returns the new cases (see cases()).
+        engine_line: hold power on the engine power-rpm line (if one is set, LPWRVAR)."""
+        return self._sweep(1, first, last, step, engine_line=engine_line)
+
+    def sweep_rpm(self, first: float, last: float, step: float, *, hold: str = "pitch",
+                  engine_line: bool = False) -> list[dict]:
+        """RSEQ: a sequence of rpms, holding the blade 'pitch', or the current 'thrust',
+        'torque' or 'power' spec (TSPEC, QSPEC, PSPEC) by changing pitch."""
+        fix = {"pitch": "A", "thrust": "T", "torque": "Q", "power": "P"}[hold]
+        return self._sweep(2, first, last, step, engine_line=engine_line, fix=fix)
+
+    def sweep_blade_angle(self, first_deg: float, last_deg: float, step_deg: float, *,
+                          engine_line: bool = False) -> list[dict]:
+        """BSEQ: a sequence of tip blade angles (deg) at the current advance ratio.
+        (7.55 leaves the step, in degrees, in the solver's DBET.)"""
+        return self._sweep(3, first_deg, last_deg, step_deg, engine_line=engine_line)
+
+    def sweep_velocity(self, first: float, last: float, step: float, *,
+                       constant_speed: bool = False, rpm: float | None = None,
+                       power: float | None = None, engine_line: bool = False) -> list[dict]:
+        """VSEQ: a sequence of flight speeds at fixed pitch (FP: advance ratio scales with
+        speed), or constant speed (CS) at rpm (default the current) and power (default
+        PSPEC, or the current power), varying pitch."""
+        return self._sweep(4, first, last, step, constant_speed=constant_speed, rpm=rpm,
+                           power=power, engine_line=engine_line)
+
+    def add_case(self) -> bool:
+        """ADDC: store the current operating point (unsolved) in the case table."""
+        from .cases import add_case
+        return add_case(self.s)
+
+    def clear_cases(self) -> None:
+        """CLRC: clear the case table."""
+        from .cases import clear_cases
+        clear_cases(self.s)
+
+    def rerun_case(self, n: int) -> bool:
+        """CASE n (1-based): solve stored case n at its advance ratio and tip angle."""
+        from .cases import rerun_case
+        return rerun_case(self.s, n)
+
+    def cases(self) -> list[dict]:
+        """The case table as SHOCAS lists it (power etc. None where not solved)."""
+        from .cases import NOT_SOLVED, PI_EXACT
+        s = self.s
+        out = []
+        for n in range(s.ncase):
+            p = [float(v) for v in s.caspar[:, n]]
+            solved = p[8] != NOT_SOLVED
+            out.append({
+                "n": n + 1, "adv": p[1], "vel": p[2], "beta_tip_deg": (p[3] * 180.0) / PI_EXACT,
+                "rpm": (div(p[2], s.rad * p[1]) * 30.0) / PI_EXACT,
+                "alt": p[4], "rho": p[5], "rmu": p[6], "vso": p[7],
+                "power": p[8] if solved else None, "thrust": p[9] if solved else None,
+                "torque": p[10] if solved else None, "efficiency": p[11] if solved else None,
+            })
+        return out
+
+    def write_cases(self, path) -> None:
+        """CPUT f: the case table in XROTOR's listing format."""
+        from .cases import case_lines
+        s = self.s
+        with open(path, "w") as f:
+            f.write("\n".join(case_lines(s.caspar, s.ncase, s.rad, s.name)) + "\n")
+
+    def read_cases(self, path, full_lines: bool = False) -> int:
+        """CGET f: replace the case table from a CPUT file; returns the number of cases.
+        As in 7.55, results (power, thrust, torque, efficiency) are lost, because lines are
+        read into 128 characters; full_lines=True reads them too."""
+        from .cases import cases_from_lines
+        with open(path) as f:
+            cases_from_lines(self.s, f.read().splitlines(), full_lines)
+        return self.s.ncase
+
+    # ------------------------------------------------------------- restart files
+    def save(self, path, overwrite: bool = True) -> None:
+        """SAVE f: write the rotor, aero sections and operating point (7.55 format)."""
+        from .restart import save
+        save(self.s, path, overwrite)
+
+    def load(self, path, stations: int | None = None, keep_free_wake: bool = False) -> bool:
+        """LOAD f: read a rotor saved by XROTOR (>= 6.9 format) or pyxrotor and solve its
+        operating point. stations: the station count to use if the file's differs (7.55
+        prompts; None keeps the current II). keep_free_wake=True avoids 7.55's reading of
+        the file's LVDUCT flag as FREE. Returns CONV."""
+        from .restart import load
+        return load(self.s, path, stations, keep_free_wake)
 
     # --------------------------------------------------------------------- results
     def performance(self) -> dict:

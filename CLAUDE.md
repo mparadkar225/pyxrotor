@@ -83,6 +83,13 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
   `reference/shim/ref755_shim.f` statement for statement, with prompts turned into arguments,
   and keep fixed-form lines within 72 columns. OPER commands are there as REFVELO, REFRPM, ...
 * `reference/build.sh` must be rerun after editing the shim.
+* Fortran output and list-directed input go through `pyxrotor.fortio`, which is tested against
+  gfortran (`REFFMT`, `REFRDL`). gfortran rounds ties to even on the exact binary value,
+  writes `0.10000+101` for 3-digit exponents, and doesn't write trailing `X` spacing at the
+  end of a record.
+* A Fortran runtime error (a READ without `ERR=`/`END=`, a prompt hitting EOF) kills the test
+  process while `Ref755` has stdout redirected, so pytest prints nothing. Rerun the test with
+  `--capture=no < /dev/null` to see the message, and test such paths in a subprocess.
 
 ## Known issues in XROTOR 7.55 (all reproduced faithfully unless noted)
 
@@ -115,6 +122,28 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
   reproduces this via `induced._gam_extended`.
 * **SETXW overwrites the COMMON relaxation factor RLX** with its Newton step factor.
 * ADWCORR is dead code (never called); APITER's 0.75R ADVFACT is computed then set to 1.0.
+* **SETCAS's increments are COMMON.** The local names DADV and DBET are the solver's Newton
+  steps, so ASEQ leaves its advance-ratio step in DADV and BSEQ its blade-angle step (in
+  degrees) in DBET. The raw step is stored before the `first == last` early return, and the
+  signed one after it.
+* **CASPLT solves each non-engine case twice** (APER(4,2) first, then the case type's own
+  solve). Afterwards it restores the original operating point and solves it again.
+* **ADDC and GETCAS don't set CASPAR(0)**, the case-type code, so those cases keep whatever
+  code was stored there before.
+* **CGET loses results.** GETCAS reads records into 128 characters, but a SHOCAS line with
+  results is 159 characters long, so power, thrust, torque and efficiency are dropped
+  (fix: `read_cases(full_lines=True)`).
+* **GETFLT over-counts a comma after a blank** (`1,2 ,3`), and the READ that follows has no
+  `END=`, so XROTOR stops with "Fortran runtime error: End of file". The port raises EOFError
+  (`test_getflt_aborts`).
+* **SAVE writes LVDUCT where LOAD reads FREE**, so after LOAD the free-wake flag means "ADW
+  differs from ADV*URDUCT" (fix: `load(keep_free_wake=True)`). SAVE stores BETA0, not BETA.
+* **LOAD stops on a line reading `END` in place of the URDuct record**: it then reads the
+  URDUCT value as the integer NADD (Fortran runtime error). The port raises LoadError.
+* **FNAME is CHARACTER*80**: XROTOR silently truncates longer file paths (pyxrotor doesn't).
+  SAVE asks on stdin before overwriting, and LOAD asks on stdin when the file's station
+  count differs from II. In tests, use short, fresh paths and feed prompts with
+  `test_restart.fortran_stdin`.
 * **DESI fails** (GETALF inversion, NaN wake) when the helical tip Mach number reaches about 1.
 * The generic compressibility model (dCD = K (M − Mcrit)^3, local Mach capped at 0.99) is
   very sensitive to Mcrit for transonic tips.
