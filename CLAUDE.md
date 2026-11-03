@@ -8,7 +8,8 @@ port is only as good as its differential tests against it.
 ```bash
 git submodule update --init      # reference sources
 reference/build.sh               # build both reference libraries (~1 min)
-pytest                           # everything (~4-5 min on CI; the design tests take half)
+pytest                           # everything, one worker per CPU (pytest-xdist)
+pytest -n0 tests/... --capture=no < /dev/null   # one process, to see Fortran output
 pytest tests/differential -q     # just the port-vs-Fortran tests
 HYPOTHESIS_PROFILE=deep pytest tests/differential -W error::RuntimeWarning   # 20k cases/test
 python tools/common_writes.py TPQ APITER    # COMMON variables a Fortran routine assigns
@@ -82,10 +83,12 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
   output arguments can be read back. Python bool → LOGICAL, int → INTEGER*4, float → REAL*8.
   COMMON arrays can be passed as arguments directly: `ref.call("HELICO", ..., ref["GAM"], ...)`.
 * A Fortran `STOP` kills the Python process: run anything that might STOP in a subprocess.
-  STOP exits with status 0 before pytest prints its summary or writes a report, so a
-  truncated run looks like a pass: a run without the final `N passed` line was cut short.
-  CI checks that `--junitxml` wrote its report (`test_stop_guard.py` pins the behavior; a
-  C exit handler calling back into Python segfaults after interpreter shutdown, so don't).
+  Under xdist (the default) a STOP crashes one worker and the test is reported failed. In
+  a single process (`-n0`) STOP exits with status 0 before pytest prints its summary or
+  writes a report, so a truncated run looks like a pass: a run without the final
+  `N passed` line was cut short. CI also checks that `--junitxml` wrote its report
+  (`test_stop_guard.py` pins both behaviors; a C exit handler calling back into Python
+  segfaults after interpreter shutdown, so don't).
   Strategies must generate inputs the shims accept:
   `blades()` once drew stations from `hub`, below REFARBI's XI0 = (hub*R)/R by an ulp.
 * Interactive routines (ASKR prompts) can't be called; transcribe them into

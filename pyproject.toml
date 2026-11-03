@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
-test = ["pytest>=7", "hypothesis>=6", "scipy"]   # scipy: needed by xrotor-python's wrapper
+test = ["pytest>=7", "pytest-xdist>=3.5", "hypothesis>=6", "scipy"]   # scipy: needed by xrotor-python's wrapper
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -20,4 +20,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "src", "tests", "tests/differential"]
-addopts = "-ra"
+# -n auto: one worker per CPU (each loads its own reference libraries); -n0 for a
+# single process, e.g. to see Fortran output with --capture=no
+addopts = "-ra -n auto --dist worksteal"

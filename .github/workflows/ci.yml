@@ -26,8 +26,9 @@ jobs:
         run: pip install -e ".[test]"
 
       - name: Test
-        # A Fortran STOP inside a reference call exits pytest with status 0 before it
-        # writes the report, so a missing report means the run was cut short
+        # Runs in parallel (pyproject's addopts: -n auto). A Fortran STOP inside a reference
+        # call then crashes one worker, reported as a failure; with -n0 it would exit pytest
+        # with status 0 before the report is written, so a missing report means a cut-short run
         run: |
           rm -f junit.xml
           pytest -v --junitxml=junit.xml
