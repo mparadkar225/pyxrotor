@@ -217,15 +217,34 @@ def sections_of(s: State) -> list[AeroSection]:
 class Rotor:
     """An XROTOR session. r.s is the State (all COMMON variables).
 
-    refresh_design_sections: False (default) reproduces 7.55, where a design keeps the
-    aero-section indices (IAERO) of the previous radial grid, so with several sections the
-    outer stations extrapolate past the last one (see CLAUDE.md). True assigns sections on
-    the design's own grid (SETIAERO after SETX in DESGEN).
+    Bug fixes (all False by default, which reproduces 7.55 exactly; see CLAUDE.md):
+      refresh_design_sections  a design assigns aero sections on its own radial grid
+                               (7.55 keeps the previous grid's indices: outer stations
+                               extrapolate past the last section)
+      fix_linear_cl            a linear design CL (redesign(cl_root_tip=...)) is evaluated on
+                               the design's grid (7.55 uses the previous grid: on a first
+                               design every station gets the root CL)
+      fix_section_fallback     a station with no valid section index uses its inner bounding
+                               section (7.55 takes the outer one, or section 1 past the last)
+      fix_all                  all of the above
+    They are stored in r.s.fixes and can be changed there at any time.
     """
 
-    def __init__(self, refresh_design_sections: bool = False):
+    def __init__(self, refresh_design_sections: bool = False, fix_linear_cl: bool = False,
+                 fix_section_fallback: bool = False, fix_all: bool = False):
         self.s = startup()
-        self.refresh_design_sections = bool(refresh_design_sections)
+        f = self.s.fixes
+        f.design_sections = bool(refresh_design_sections or fix_all)
+        f.linear_cl = bool(fix_linear_cl or fix_all)
+        f.section_fallback = bool(fix_section_fallback or fix_all)
+
+    @property
+    def refresh_design_sections(self) -> bool:
+        return self.s.fixes.design_sections
+
+    @refresh_design_sections.setter
+    def refresh_design_sections(self, v: bool) -> None:
+        self.s.fixes.design_sections = bool(v)
 
     # ------------------------------------------------------------- top level / AERO
     def atmosphere(self, alt_km: float) -> None:
@@ -418,7 +437,7 @@ class Rotor:
         s = self.s
         s.ldesini = True                                  # 'HHY added initialization'
         sec1 = sections_of(s)[0]
-        if not desgen(s, betz_ok=betz_ok, refresh_sections=self.refresh_design_sections):
+        if not desgen(s, betz_ok=betz_ok):
             if any(c > sec1.clmax or c < sec1.clmin for c in s.cldes[:s.ii]):
                 raise ValueError(f"design CL is past section 1's stall limits "
                                  f"({sec1.clmin}, {sec1.clmax})")

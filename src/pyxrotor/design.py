@@ -37,11 +37,20 @@ class BetzLimitError(ValueError):
 
 
 def setcld(s: State, cl1: float, cl2: float) -> None:
-    """Port of SUBROUTINE SETCLD: CLDES(I) = (1-XI)*CL1 + XI*CL2 on the *current* XI grid."""
+    """Port of SUBROUTINE SETCLD: CLDES(I) = (1-XI)*CL1 + XI*CL2 on the *current* XI grid.
+    (7.55: before a design that is the previous grid; on a first design all XI are 0, so
+    every station gets CL1. s.cldes_linear records (CL1, CL2) for Fixes.linear_cl.)"""
     if cl1 == 999.0:
         raise NotImplementedError("SETCLD: reading the CL distribution from a file is not ported")
+    cl1, cl2 = float(cl1), float(cl2)
     ii = s.ii
     s.cldes[:ii] = (1.0 - s.xi[:ii]) * cl1 + s.xi[:ii] * cl2
+    s.cldes_linear = (cl1, cl2)
+
+
+def _past_stall(s: State) -> bool:
+    sec1 = sections(s)[0]
+    return any(c > sec1.clmax or c < sec1.clmin for c in s.cldes[:s.ii])
 
 
 def _set_grid(s: State) -> None:
@@ -70,10 +79,11 @@ def desini(s: State) -> None:
             t = div(float(s.xi[i]), adv)
             w = fm.sqrt(1.0 + t * t)
             s.re[i] = div(float(s.ch[i]) * w * s.rho * s.vel * s.rad, s.rmu)
-            a = getalf(i, float(s.cl[i]), w, xi=s.xi, iaero=s.iaero, sections=secs, vel=s.vel, vso=s.vso)
+            a = getalf(i, float(s.cl[i]), w, xi=s.xi, iaero=s.iaero, sections=secs, vel=s.vel,
+                       vso=s.vso, fix_fallback=s.fixes.section_fallback)
             s.stall[i] = a.stallf
             r = getclcdcm(i, a.alf, w, float(s.re[i]), xi=s.xi, iaero=s.iaero, sections=secs,
-                          vel=s.vel, vso=s.vso)
+                          vel=s.vel, vso=s.vso, fix_fallback=s.fixes.section_fallback)
             s.cl[i], s.cd[i], s.stall[i] = r.clift, r.cdrag, r.stallf
 
         # ---- Larrabee: Prandtl's factor F for the tip (none for ducted designs)
@@ -284,7 +294,8 @@ def desmil(s: State, icase: int) -> None:
     deiter(s, icase)
 
 
-def desgen(s: State, betz_ok: bool = False, refresh_sections: bool = False) -> bool:
+def desgen(s: State, betz_ok: bool = False, refresh_sections: bool | None = None,
+           fix_linear_cl: bool | None = None) -> bool:
     """Port of SUBROUTINE DESGEN: design an MIL rotor from the DESI parameters in the State
     (NBLDS, RADDES, R0DES, RWDES, VELDES, ADVDES or RPMDES, TDDES/DEST or PDDES/DESP, CLDES).
 
@@ -292,14 +303,23 @@ def desgen(s: State, betz_ok: bool = False, refresh_sections: bool = False) -> b
     stall limits, or (unless betz_ok, the answer to XROTOR's prompt) thrust or power beyond
     the Betz windmill limits.
 
-    refresh_sections: False reproduces 7.55, which keeps IAERO from the *previous* radial
-    grid (stale section indices, see CLAUDE.md). True calls SETIAERO on the new grid first.
+    refresh_sections (default s.fixes.design_sections): False reproduces 7.55, which keeps
+    IAERO from the *previous* radial grid (stale section indices, see CLAUDE.md). True calls
+    SETIAERO on the new grid.
+
+    fix_linear_cl (default s.fixes.linear_cl): True re-evaluates the last SETCLD's linear CL
+    (s.cldes_linear) on the new grid, and moves the stall-limit check after SETX so that it
+    tests those values; a design CL past the limits then returns False after the operating
+    point and grid have been set up.
     """
+    if refresh_sections is None:
+        refresh_sections = s.fixes.design_sections
+    if fix_linear_cl is None:
+        fix_linear_cl = s.fixes.linear_cl
+    fix_cl = fix_linear_cl and s.cldes_linear is not None
     ii = s.ii
-    sec1 = sections(s)[0]
-    for i in range(ii):
-        if s.cldes[i] > sec1.clmax or s.cldes[i] < sec1.clmin:
-            return False                               # 'Design CL is past stall limit'
+    if not fix_cl and _past_stall(s):
+        return False                                   # 'Design CL is past stall limit'
 
     # ---- operating parameters
     s.conv = False
@@ -330,6 +350,11 @@ def desgen(s: State, betz_ok: bool = False, refresh_sections: bool = False) -> b
     if refresh_sections:
         from .aero import setiaero
         s.iaero[:ii] = setiaero(s.xi[:ii], sections(s))
+    if fix_cl:
+        cl1, cl2 = s.cldes_linear
+        s.cldes[:ii] = (1.0 - s.xi[:ii]) * cl1 + s.xi[:ii] * cl2
+        if _past_stall(s):
+            return False
 
     # ---- CL array from the design CL
     s.cl[:ii] = s.cldes[:ii]

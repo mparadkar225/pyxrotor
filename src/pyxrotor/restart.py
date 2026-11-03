@@ -249,5 +249,6 @@ def load(s: State, path: str | os.PathLike, stations: int | None = None,
     s.dest, s.desp = False, True
     s.cldes[:ii] = s.cl[:ii]
     s.cldes0 = 0.0
+    s.cldes_linear = None                              # CLDES is no longer a linear SETCLD
     s.lrotor = True
     return bool(s.conv)

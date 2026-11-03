@@ -226,7 +226,8 @@ def sort_sections(sections: Sequence[AeroSection]) -> list[AeroSection]:
 
 
 def getclcdcm(is_: int, alf: float, w: float, rey: float, *, xi: Sequence[float],
-              iaero: np.ndarray, sections: Sequence[AeroSection], vel: float, vso: float) -> StationAero:
+              iaero: np.ndarray, sections: Sequence[AeroSection], vel: float, vso: float,
+              fix_fallback: bool = False) -> StationAero:
     """Port of SUBROUTINE GETCLCDCM: section properties at station is_ (0-based).
 
     Data comes from section iaero[is_] and, if there is one, the next section outward,
@@ -236,14 +237,24 @@ def getclcdcm(is_: int, alf: float, w: float, rey: float, *, xi: Sequence[float]
     If iaero[is_] is not a valid section index, it is recomputed and written back to
     iaero, faithfully including 7.55's fallback behavior: the search leaves N at the first
     section *outboard* of the station (the outer, not the inner, bounding section), and
-    stores the inner index in IAERO only if the station lies outboard of section 1.
+    stores the inner index in IAERO only if the station lies outboard of section 1. A station
+    outboard of the last section finds no bounding pair and gets section 1 (the root one).
+
+    fix_fallback=True instead takes the inner bounding section, as SETIAERO would (section 1
+    for a station inboard of it), and stores it in IAERO.
     """
     naero = len(sections)
     xis = float(xi[is_])
 
     # --- Check for installed aero data section index
     n = int(iaero[is_])
-    if n < 0 or n >= naero:
+    if (n < 0 or n >= naero) and fix_fallback:
+        n = 0
+        for k in range(naero):
+            if sections[k].xisect <= xis:
+                n = k
+        iaero[is_] = n
+    if n < 0 or n >= naero:                           # 7.55's search
         jumped = False
         if naero > 1:
             # --- Find lower index of aero data sections XIAERO(N) bounding XI(IS)
@@ -302,7 +313,8 @@ class AlphaSolution(NamedTuple):
 
 
 def getalf(is_: int, clift: float, w: float, *, xi: Sequence[float], iaero: np.ndarray,
-           sections: Sequence[AeroSection], vel: float, vso: float) -> AlphaSolution:
+           sections: Sequence[AeroSection], vel: float, vso: float,
+           fix_fallback: bool = False) -> AlphaSolution:
     """Port of SUBROUTINE GETALF: angle of attack giving CL = clift at station is_.
 
     Newton iteration on GETCLCDCM with Reynolds scaling off, started from section 1's
@@ -316,7 +328,8 @@ def getalf(is_: int, clift: float, w: float, *, xi: Sequence[float], iaero: np.n
     alf = a0
     alf_cl = alf_w = 0.0
     for _ in range(GETALF_NITER):
-        r = getclcdcm(is_, alf, w, rey, xi=xi, iaero=iaero, sections=sections, vel=vel, vso=vso)
+        r = getclcdcm(is_, alf, w, rey, xi=xi, iaero=iaero, sections=sections, vel=vel, vso=vso,
+                      fix_fallback=fix_fallback)
         stallf = r.stallf
         dalf = -_div(r.clift - clift, r.cl_alf)
         alf = alf + dalf

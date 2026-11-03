@@ -35,7 +35,7 @@ r.velocity(40.0)
 r.solve_rpm(1200.0)                           # or solve_thrust(800.0, fix="rpm"), ...
 print(r.performance())                        # thrust, power, efficiency, CT, CP, ...
 
-d = Rotor(refresh_design_sections=True)       # fix 7.55's stale section indices
+d = Rotor(fix_all=True)                       # 7.55 bug fixes on (default: 7.55 exactly)
 d.atmosphere(7.62)
 d.set_sections([...])
 d.design(nblds=4, tip_radius=1.702, hub_radius=0.20, vel=112.0, rpm=1437.0,
@@ -50,6 +50,21 @@ r2 = Rotor(); r2.load("p51.xr")               # LOAD: XROTOR's own .xr files too
 r2.nacelle("spinner.nac")                     # NACE: body area file -> UBODY at the blades
 r2.nacelle(z=[0, 0.5, 1.0], area=[-0.1, -0.35, -0.45], rotor_z=0.15, wake_area=-0.3)
 ```
+
+## 7.55 bugs and fixes
+
+By default pyxrotor reproduces XROTOR 7.55 bit for bit, bugs included (they're listed in
+[`CLAUDE.md`](CLAUDE.md)). The ones that change results have a fix you can turn on:
+
+| Option | Fixes |
+|---|---|
+| `Rotor(refresh_design_sections=True)` | a design keeps the previous grid's aero-section indices (outer stations extrapolate past the last section) |
+| `Rotor(fix_linear_cl=True)` | a linear design CL is set on the previous grid (a first design gets the root CL everywhere) |
+| `Rotor(fix_section_fallback=True)` | a station with no valid section index uses the wrong section (past the last section: the root one) |
+| `Rotor(fix_all=True)` | all three |
+| `nacelle(..., fix_source_positions=True)` | NACE's body sources are shifted one interval downstream |
+| `load(..., keep_free_wake=True)` | LOAD sets the free-wake flag from SAVE's duct flag |
+| `read_cases(..., full_lines=True)` | CGET drops power, thrust, torque and efficiency |
 
 ## Quick start
 

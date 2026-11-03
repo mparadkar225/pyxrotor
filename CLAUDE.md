@@ -68,6 +68,9 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
      `State.INDEX_VARS` lists such variables; statesync converts them.
 6. **Known 7.55 bugs are reproduced first, then fixed.** Port the faithful behavior (mark it
    `# 7.55:` in the code), prove it matches, then add a fix behind an option, with a test for each.
+   Options that act inside the solvers live in `State.fixes` (Python-only, not COMMON, all
+   False by default). `Rotor(fix_all=True)` turns them all on. Test each fix against a
+   patched shim or prepared reference inputs (`test_fixes.py`).
 7. **Keep Fortran names in comments** next to their Python equivalents and cite the
    source routine in each docstring. Code with no effect on state (unused locals, prints,
    plotting) may be omitted; say so in the docstring.
@@ -103,15 +106,24 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
   after SETX in DESGEN. The shim's `REFDESGEN(OK, LFIXIA)` is the oracle for the fixed path.
 * **DESI SETCLD uses the current (pre-DESGEN) XI grid**, so a linear CL (`EDIT CL`) is
   evaluated on the previous design's stations. On a first design every station is at
-  XI = 0, so the whole blade gets the root CL.
+  XI = 0, so the whole blade gets the root CL. DESGEN's stall check then tests those
+  values. Fix: `Rotor(fix_linear_cl=True)` (`State.fixes.linear_cl`) re-evaluates the last
+  SETCLD (`State.cldes_linear`) on the design grid and checks stall there. The oracle is
+  `REFDESGENX(OK, LFIXIA, LFIXCL, CL1, CL2)`. On a 3-blade test design with CL 0.7→0.4,
+  7.55 gives 86.4% (CL 0.7 everywhere) and the fix gives 83.6%.
 * **DESI `ITER n` (with an inline argument) sets NITERA**, the OPER limit. Only the prompted
   form sets the design limit NITERD.
 * **DEITER's ducted branch reads GAMDES**, a local that is never initialized, so a ducted
   design is undefined in 7.55. pyxrotor raises NotImplementedError. DESINI's ZETA is likewise
   undefined if neither DEST nor DESP is set; pyxrotor raises ValueError.
 * **GETCLCDCM's fallback picks the wrong section.** When a station's IAERO is invalid (as
-  INIT leaves it, 0 everywhere, until SETIAERO runs), the recovery search exits with N at the
-  first section *outboard* of the station instead of the inner bounding one.
+  INIT leaves it, 0 everywhere, until SETIAERO runs, or after sections are deleted), the
+  recovery search exits with N at the first section *outboard* of the station instead of
+  the inner bounding one. It stores the inner index, so only that first lookup is wrong. A
+  station outboard of the last section finds no bounding pair and gets section 1, the root
+  airfoil, permanently. Fix: `Rotor(fix_section_fallback=True)`
+  (`State.fixes.section_fallback`) picks the SETIAERO index. The oracle is the unmodified
+  routine with those IAERO entries pre-filled (`test_fixes.py`).
 * **GETALF starts every station from section 1's zero-lift angle**, not the station's own.
 * **TPQ: TV_ADW and PV_ADW are overwritten at each station, not accumulated**, so the
   viscous thrust/power sensitivity to ADW in APITER's Jacobian comes from the tip station only.

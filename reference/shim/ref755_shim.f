@@ -202,15 +202,28 @@ C----- convergence failed: restore clobbered blade angles
 
 
       SUBROUTINE REFDESGEN(OKIN,LFIXIA)
+C---- DESGEN, 7.55 order (see REFDESGENX)
+      LOGICAL OKIN, LFIXIA
+      CALL REFDESGENX(OKIN,LFIXIA,.FALSE.,0.0D0,0.0D0)
+      RETURN
+      END ! REFDESGEN
+
+
+
+      SUBROUTINE REFDESGENX(OKIN,LFIXIA,LFIXCL,CL1,CL2)
 C-----------------------------------------------------------------------
 C     DESGEN (xdesi.f) with the Betz-limit prompt answered by OKIN.
 C     Returns CONV unchanged if DESGEN returns early.
-C     LFIXIA (not in 7.55): CALL SETIAERO on the new grid after XWINIT,
-C     the fix for the stale aero-section indices.
+C     Not in 7.55, both for the bug-fix options:
+C     LFIXIA  CALL SETIAERO on the new grid after XWINIT (stale
+C             aero-section indices)
+C     LFIXCL  re-evaluate the linear CL (CL1 root, CL2 tip) with SETCLD
+C             on the new grid, and do the stall check there instead
 C-----------------------------------------------------------------------
       INCLUDE 'XROTOR.INC'
-      LOGICAL OK, OKIN, LFIXIA
+      LOGICAL OK, OKIN, LFIXIA, LFIXCL
 C
+      IF(.NOT.LFIXCL) THEN
       DO I=1, II
         N = 1
         CALL GETAERO(N,XISECT,A0,CLMAX,CLMIN,
@@ -218,6 +231,7 @@ C
      &              CDMIN,CLDMIN,DCDCL2,CMCON,MCRIT,REREF,REXP)
         IF(CLDES(I).GT.CLMAX .OR. CLDES(I).LT.CLMIN) RETURN
       ENDDO
+      ENDIF
 C
 C---- Set up operating parameters
       CONV = .FALSE.
@@ -248,6 +262,16 @@ C---- Set up discrete coordinates
       CALL SETX
       CALL XWINIT
       IF(LFIXIA) CALL SETIAERO
+      IF(LFIXCL) THEN
+       CALL SETCLD(CL1,CL2)
+       DO I=1, II
+        N = 1
+        CALL GETAERO(N,XISECT,A0,CLMAX,CLMIN,
+     &              DCLDA,DCLDA_STALL,DCL_STALL,
+     &              CDMIN,CLDMIN,DCDCL2,CMCON,MCRIT,REREF,REXP)
+        IF(CLDES(I).GT.CLMAX .OR. CLDES(I).LT.CLMIN) RETURN
+       ENDDO
+      ENDIF
 C
 C---- Fill CL array with design-CL array
       DO I=1, II
@@ -271,7 +295,7 @@ C
 C---- Calculate MIL rotor (varying chord, varying twist, fixed CL case)
       CALL DESMIL(2)
       RETURN
-      END ! REFDESGEN
+      END ! REFDESGENX
 
 
 

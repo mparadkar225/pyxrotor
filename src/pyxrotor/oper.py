@@ -42,7 +42,8 @@ def sections(s: State) -> list[AeroSection]:
 def _station_aero(s: State, secs, i: int, alfa: float, w: float, rey: float):
     """CALL GETCLCDCM(I,ALFA,W,REY, CL(I),..,STALL(I), CD(I),.., CM(I),..): stores CL, CD,
     CM, STALL at station i and returns the full result."""
-    r = getclcdcm(i, alfa, w, rey, xi=s.xi, iaero=s.iaero, sections=secs, vel=s.vel, vso=s.vso)
+    r = getclcdcm(i, alfa, w, rey, xi=s.xi, iaero=s.iaero, sections=secs, vel=s.vel, vso=s.vso,
+                  fix_fallback=s.fixes.section_fallback)
     s.cl[i], s.cd[i], s.cm[i], s.stall[i] = r.clift, r.cdrag, r.cmom, r.stallf
     return r
 
@@ -124,7 +125,7 @@ def tpq(s: State, itype: int) -> None:
             elif itype == 2:
                 # ---- design: fixed local CL, chord from circulation
                 a = getalf(i, float(s.cl[i]), w, xi=s.xi, iaero=s.iaero, sections=secs,
-                           vel=s.vel, vso=s.vso)
+                           vel=s.vel, vso=s.vso, fix_fallback=s.fixes.section_fallback)
                 alfa, s.stall[i] = a.alf, a.stallf
                 al_gi = 0.0
                 al_dbe = 0.0
@@ -164,7 +165,7 @@ def tpq(s: State, itype: int) -> None:
                 cl_vt = clw * v.w_vt
                 cl_va = clw * v.w_va
                 a = getalf(i, float(s.cl[i]), w, xi=s.xi, iaero=s.iaero, sections=secs,
-                           vel=s.vel, vso=s.vso)
+                           vel=s.vel, vso=s.vso, fix_fallback=s.fixes.section_fallback)
                 alfa, s.stall[i] = a.alf, a.stallf
                 al_gi = a.alf_cl * cl_gi
                 al_dbe = a.alf_cl * cl_dbe

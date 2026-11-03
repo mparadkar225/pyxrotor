@@ -15,6 +15,7 @@ Conventions
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -31,8 +32,24 @@ def _shape(bounds):
     return tuple(hi - lo + 1 for lo, hi in bounds)
 
 
+@dataclass
+class Fixes:
+    """Corrections of 7.55 bugs, all off by default (off = bit-identical to XROTOR 7.55).
+    Not COMMON variables: Python-only options carried with the State."""
+    #: SETIAERO on the design's own radial grid (DESGEN keeps the previous grid's indices)
+    design_sections: bool = False
+    #: a linear design CL (DESI CL root,tip) is evaluated on the design's own grid
+    linear_cl: bool = False
+    #: GETCLCDCM's search for a missing section index picks the inner bounding section
+    #: (as SETIAERO does), instead of the outer one or, past the last section, section 1
+    section_fallback: bool = False
+
+
 class State:
-    """All XROTOR COMMON variables, zero-initialized (Fortran COMMON starts zeroed)."""
+    """All XROTOR COMMON variables, zero-initialized (Fortran COMMON starts zeroed).
+
+    Two attributes are not COMMON: fixes (Fixes, the bug-fix options) and cldes_linear
+    ((root, tip) of the last SETCLD, used by Fixes.linear_cl; None after LOAD)."""
 
     #: Fortran variable name -> COMMON block name
     BLOCK_OF = {name: blk for blk, vs in BLOCKS.items() for name, _, _ in vs}
@@ -50,6 +67,8 @@ class State:
             setattr(self, name.lower(), value)
         if "IAERO" in self.SPEC:
             self.iaero[:] = -1                      # Fortran 0 = unset
+        self.fixes = Fixes()
+        self.cldes_linear: tuple[float, float] | None = None
 
     def copy(self) -> "State":
         return copy.deepcopy(self)
