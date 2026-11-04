@@ -70,6 +70,17 @@ def test_clcdcm_non_finite(ref_module, alf, w, rey, fl, sec, bad_field, bad):
     test_clcdcm.hypothesis.inner_test(ref_module, alf, w, rey, fl, sec)
 
 
+@pytest.mark.parametrize("rey", [5e-324, 1e-320])
+def test_clcdcm_reynolds_underflow(ref_module, rey):
+    """REY/REREF underflows to 0 with a negative REXP: the Re correction pow(0, REXP) is a
+    pole, +inf in the Fortran (fmath.pow returned nan until the compiled CLCDCM's
+    comparison with the Python found it)."""
+    sec = AeroSection(a0=0.0, clmax=1.0, clmin=0.0, dclda=2.0, dclda_stall=0.0, dcl_stall=0.0,
+                      cdmin=0.03125, cldmin=0.0, dcdcl2=0.0, cmcon=0.0, reref=1e4, rexp=-1.0,
+                      mcrit=1.0)
+    test_clcdcm.hypothesis.inner_test(ref_module, 0.0, 0.0, rey, (120.0, 340.0), sec)
+
+
 def test_clcdcm_physics():
     """Sanity checks independent of the Fortran: linear range, stall, Mach limiting."""
     sec = AeroSection()

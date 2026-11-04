@@ -53,6 +53,8 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
    * Python raises where Fortran returns inf/NaN. Use `pyxrotor.fmath` (`div`, `pow`,
      `sqrt`, `exp`, `log`, `sin`, `cos`) wherever a zero divisor, overflow, or invalid
      argument is possible. Diverging Newton iterations reach these paths and tests cover them.
+     `fmath.pow` follows C99 pow (tested against libm in `test_fmath.py`): `math.pow(0, y<0)`
+     raises, but the Fortran gets the pole, +-inf (CLCDCM when REY/REREF underflows to 0).
    * MIN/MAX with NaN depend on the call site. Each compiles to MINSD/MAXSD, which return the
      *source* operand when either operand is NaN. A constant or memory operand is always the
      source; otherwise register allocation decides. `python tools/minmax_sites.py xoper

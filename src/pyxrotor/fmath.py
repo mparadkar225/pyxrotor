@@ -34,13 +34,23 @@ def div(a: float, b: float) -> float:
         return math.copysign(inf, a) * math.copysign(1.0, b)
 
 
+def _odd_integer(y: float) -> bool:
+    return math.isfinite(y) and float(y).is_integer() and int(y) % 2 == 1
+
+
 def pow(x: float, y: float) -> float:
-    """x**y with a REAL exponent (libm pow): overflow -> inf, invalid -> nan."""
+    """x**y with a REAL exponent, as libm's pow (C99) returns it: overflow -> +-inf; a zero
+    base with a negative exponent (a pole) -> +-inf, negative only for -0 and an odd
+    integer exponent; a negative base with a non-integer exponent -> nan. Python's
+    math.pow raises for all three. (The pole is reached in CLCDCM when REY/REREF
+    underflows to 0 with a negative REXP; found by the compiled-vs-pure comparison.)"""
     try:
         return math.pow(x, y)
     except OverflowError:
-        return math.copysign(inf, x) if (x < 0 and float(y).is_integer() and int(y) % 2) else inf
+        return math.copysign(inf, x) if (x < 0 and _odd_integer(y)) else inf
     except ValueError:
+        if x == 0.0:                                  # y < 0: pole
+            return math.copysign(inf, x) if _odd_integer(y) else inf
         return nan
 
 
