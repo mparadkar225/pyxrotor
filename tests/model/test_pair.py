@@ -208,3 +208,22 @@ def test_weights_mode_rejects_bad_input():
         RotorPair(f, a, 0.0, interaction="vput")
     with pytest.raises(ValueError):
         RotorPair(f, a, 0.0, interaction="weights", weights=(0.5, 0.0, 0.5))
+
+
+def test_power_split_modes_meet_their_targets():
+    """solve_power_split with the field model: each rotor absorbs its share of the power,
+    at the given rpms (fix="rpm") or at its own rpm with the blade angles fixed. The
+    geared fixed-pitch case is CROTOR's approximate procedure, weights interaction only."""
+    f, a, rpm = rotol_pair()
+    p = RotorPair(f, a, 0.2 * f.s.rad, gear_ratio=1.05)
+    res = p.solve_power_split(1.2e6, rpm, power_split=0.4)
+    assert res.converged
+    assert rel(res.front["power"], 0.48e6) < 1e-6 and rel(res.rear["power"], 0.72e6) < 1e-6
+    assert rel(res.front["rpm"], rpm) < 1e-12 and rel(res.rear["rpm"], 1.05 * rpm) < 1e-12
+    res = p.solve_power_split(1.2e6, power_split=0.4, fix="pitch", locked=False)
+    assert res.converged
+    assert rel(res.front["power"], 0.48e6) < 1e-6 and rel(res.rear["power"], 0.72e6) < 1e-6
+    with pytest.raises(NotImplementedError):
+        p.solve_power_split(1.2e6, fix="pitch", locked=True)
+    with pytest.raises(ValueError):
+        p.solve_power_split(1.2e6)                     # fix="rpm" needs the rpm

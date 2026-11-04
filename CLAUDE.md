@@ -249,10 +249,15 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
 * `RotorPair(interaction="weights")` is a port, not a new model: CROTOR's CR iteration
   (crotor.f v0.85, CROTOR 755-ES1.3, GPL v2+, github.com/mparadkar225/crotor; its XROTOR is
   7.55 with the solver unchanged). The oracle is the shim's transcription (REFCRLOAD,
-  REFCRVCLR, REFCRRPM; CROTOR's own COMMON is /CRSHIM/), `tests/differential/test_crotor.py`.
-  CROTOR shares one COMMON between the rotors, and two leaks matter bitwise: LOADCR copies
-  only NADD profile entries (the rest stay from the rotor solved before, `_shared_tail`),
-  and PUTVEL sets NADD = II before its UVADD calls (WA/WT cancel, so rounding only). Its
+  REFCRVCLR, REFCRRPM, REFCRPOWE; CROTOR's own COMMON is /CRSHIM/),
+  `tests/differential/test_crotor.py`. POWE is `solve_power_split`: FIX off is APER(3,1)
+  per rotor, FIX on is APER(3,2), and FIX+SYNC switches, once *either* rotor converges, to
+  both at (RPMFWD+RPMAFT)/(1+RRAT) and APER(4,2), so its total power is approximate. A
+  failed POWE solve restores the blade angles (label 590). CROTOR shares one COMMON
+  between the rotors, and three leaks matter bitwise: LOADCR copies only NADD profile
+  entries (the rest stay from the rotor solved before, `_shared_tail`); PUTVEL sets
+  NADD = II before its UVADD calls (WA/WT cancel, so rounding only); and the fixed-pitch
+  POWE solve starts from the previous rotor's ADV. Its
   default weights are the field model's zero-spacing limit, to first order in the spacing
   (`test_zero_spacing_is_crotors_weights`). Sample rotors: `tests/data/crotor/`.
 * NACA Report 747 (`validation/naca747`, `tests/measurement/test_naca747.py`): the tested

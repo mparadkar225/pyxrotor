@@ -1329,3 +1329,181 @@ C
       LCONO = LCON
       RETURN
       END ! REFCRRPM
+
+
+
+      SUBROUTINE REFCRPOWE(POWF,POWA,RPMF,RRAT,VELIN,LPITCH,LSRPM,
+     &                     ICRITL,CRCON,UWTF,VWTF,UWTA,VWTA,
+     &                     NSOLV,TDHIST,LCONO,LOK,GAMF,TTF,PTF)
+C-----------------------------------------------------------------------
+C     INPU (rpm and flight speed; the aft rpm is RPMF*RRAT) and the POWE
+C     command (crotor.f label 400, COMAND = 'POWE', no input) with the
+C     power of each rotor POWF, POWA (POWINF, POWINA; INPU's POWERT/2
+C     each by default). LPITCH (FIX): blade angles fixed; LSRPM (SYNC):
+C     rpms synchronized at RRAT. Outputs as REFCRRPM. A failed solve
+C     restores its blade angles (label 590) and returns LOK = .FALSE.;
+C     the convergence menu and AUTO are not transcribed.
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      LOGICAL LFWD
+      COMMON /CRSHIM/ RADCR(2),RAKECR(2),XI0CR(2),XW0CR(2),
+     &  XICR(2,IX),CHCR(2,IX),BETACR(2,IX),BETA0CR(2,IX),
+     &  UBODYCR(2,IX),
+     &  RADDF(IX),UADDF(IX),VADDF(IX),UADDRF(IX),VADDRF(IX),
+     &  RADDA(IX),UADDA(IX),VADDA(IX),UADDRA(IX),VADDRA(IX),
+     &  VELCR,IICR(2),NBLDCR(2),NADDF,NADDA,LFWD
+      DIMENSION TDHIST(*), GAMF(IX)
+      LOGICAL LCONO, LOK, LCONF, LCONA, LCON, LNCON, LFORWARD
+      LOGICAL LPITCH, LSRPM, LSWIT
+C
+C---- INPU (label 100), rpm and speed part
+      RPMA = RPMF * RRAT
+      VELOLD = VEL
+      VELCR = VELIN
+      VEL = VELCR
+      THR  = TTOT *(RHO*VELOLD**2*RAD**2)
+      TTOT = THR / (RHO*VEL**2*RAD**2)
+      TRQ  = QTOT *(RHO*VELOLD**2*RAD**3)
+      QTOT = TRQ / (RHO*VEL**2*RAD**3)
+      PWR  = PTOT *(RHO*VELOLD**3*RAD**2)
+      PTOT = PWR / (RHO*VEL**3*RAD**2)
+      RPMFWD = 0.0
+      RPMAFT = 0.0
+C
+C---- label 400
+      LCONF  = .FALSE.
+      LCONA  = .FALSE.
+      LCON   = .FALSE.
+      LNCON  = .FALSE.
+      LSWIT  = .FALSE.
+      TTOTF  = 0.0
+      TTOTA  = 0.0
+      ICRITR = 0
+      POWINF = POWF
+      POWINA = POWA
+      RPMINF = RPMF
+      RPMINA = RPMA
+      LOK = .TRUE.
+C
+      LFORWARD=.FALSE.
+ 410  ICRITR = ICRITR + 1
+      LFORWARD = .NOT.LFORWARD
+      IF(LFORWARD) THEN
+         CALL CRLOAD(1)
+      ELSE
+         CALL CRLOAD(2)
+      ENDIF
+C
+C---- label 430: POWE, specified power
+      IF(LFWD) THEN
+         PSPEC = POWINF
+         RPM   = RPMINF
+      ELSE
+         PSPEC = POWINA
+         RPM   = RPMINA
+      ENDIF
+C
+      CONV = .FALSE.
+      IF(.NOT.LPITCH) THEN
+         ADV = VEL/(RAD*RPM*PI/30.0)
+         CALL APER(3,1,LOPRINI)
+      ELSE
+         IF(.NOT.LSRPM) THEN
+           CALL APER(3,2,LOPRINI)
+           IF(LFWD) THEN
+             RPMFWD = VEL/(RAD*ADV*PI/30.)
+           ELSE
+             RPMAFT = VEL/(RAD*ADV*PI/30.)
+           ENDIF
+         ELSE
+           IF((LCONA.OR.LCONF) .AND. .NOT.LSWIT) THEN
+             RPMTF = (RPMFWD+RPMAFT)/(1.+RRAT)
+             RPMTA =  RPMTF*RRAT
+             LSWIT = .TRUE.
+             LCONF = .FALSE.
+             LCONA = .FALSE.
+             LCON  = .FALSE.
+           ENDIF
+           IF(LSWIT) THEN
+             IF(LFWD)THEN
+               RPM = RPMTF
+             ELSE
+               RPM = RPMTA
+             ENDIF
+             ADV = VEL / (RAD*RPM*PI/30.)
+             CONV = .FALSE.
+             CALL APER(4,2,LOPRINI)
+           ELSE
+             CALL APER(3,2,LOPRINI)
+             IF(LFWD) THEN
+               RPMFWD = VEL/(RAD*ADV*PI/30.)
+             ELSE
+               RPMAFT = VEL/(RAD*ADV*PI/30.)
+             ENDIF
+           ENDIF
+         ENDIF
+      ENDIF
+C
+      IF(CONV) THEN
+        IF(.NOT.LPITCH) THEN
+          IF(ABS(DBETA).GT.PI/15.0 .AND. TTOT.LT.0.0) GO TO 590
+        ENDIF
+        GO TO 445
+      ENDIF
+      GO TO 590
+C
+ 445  CALL CRPUTV(UWTF,VWTF,UWTA,VWTA)
+C
+      IF(LFWD) THEN
+         TDIFF = ABS((TTOT-TTOTF)/TTOT)
+         TTOTF = TTOT
+         DO I=1, II
+           GAMF(I) = GAM(I)
+         ENDDO
+         TTF = TTOT
+         PTF = PTOT
+      ELSE
+         TDIFF = ABS((TTOT-TTOTA)/TTOT)
+         TTOTA = TTOT
+      END IF
+      TDHIST(ICRITR) = TDIFF
+C
+      IF(TDIFF .LE. CRCON) THEN
+         IF (LFWD) THEN
+            LCONF = .TRUE.
+         ELSE
+            LCONA = .TRUE.
+         END IF
+      END IF
+C
+      IF(LCONF .AND. LCONA) THEN
+        IF(LPITCH.AND.LSRPM.AND..NOT.LSWIT) THEN
+          GO TO 410
+        ELSE
+          GO TO 500
+        ENDIF
+      ENDIF
+      IF(ICRITR .GE. ICRITL) GO TO 510
+      GO TO 410
+C
+ 500  IF (.NOT.LFWD .AND. .NOT.LCON)  GO TO 410
+      LCON  = .TRUE.
+      GO TO 520
+C
+ 510  IF (.NOT.LFWD .AND. .NOT.LNCON) GO TO 410
+      LNCON = .TRUE.
+C
+ 520  IF(LFWD) GO TO 410
+      GO TO 600
+C
+C---- label 590: convergence failed, return blade angles
+ 590  DO I=1, II
+        BETA(I)  = BETA(I)  - DBETA
+        BETA0(I) = BETA0(I) - DBETA
+      ENDDO
+      LOK = .FALSE.
+C
+ 600  NSOLV = ICRITR
+      LCONO = LCON
+      RETURN
+      END ! REFCRPOWE

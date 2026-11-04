@@ -28,6 +28,10 @@ limit (tests/model/test_pair.py). Operating conditions (RotorPair.solve_*):
                                            set to give the torque split (0.5: equal torque)
     solve_thrust(thrust, rpm, torque_split) the same with total thrust given
     solve_power_fixed_pitch(power, rpm)    both blade angles fixed, rpm found for the power
+    solve_power_split(power, rpm, power_split, fix, locked)
+                                           shaft power split by power (CROTOR's POWE): at
+                                           fixed rpm, at fixed pitch with each rotor's own
+                                           rpm, or at fixed pitch geared together
 The rear runs at gear_ratio times the front's rpm.
 
 Coordinates: z along the axis, positive downstream, front disk at z = 0, rear at the
@@ -48,6 +52,7 @@ from .constants import PI
 from .field import InducedField
 from .fmath import div
 from .numerics import spline
+from .oper import aper
 from .slipstream import set_profile
 from .wake import uvadd
 
@@ -218,27 +223,55 @@ class RotorPair:
         """CROTOR: both rotors share XROTOR's COMMON, and LOADCR copies only the first NADD
         entries of a rotor's stored profile into it, so the entries beyond come from the
         rotor in the COMMON before (the last one solved, or loaded). PUTVEL reads them
-        (NADD=II). Reproduced by copying them into this rotor's State."""
+        (NADD=II). Reproduced by copying them into this rotor's State. The same goes for
+        ADV, which the fixed-pitch power solve (APER(3,2)) starts from: it is the previous
+        rotor's."""
         if last is rotor:
             return
         a, b = last.s, rotor.s
         n = b.nadd
         for k in ("radd", "uadd", "vadd", "uaddr", "vaddr"):
             getattr(b, k)[n:] = getattr(a, k)[n:]
+        b.adv = a.adv                               # CROTOR: ADV is COMMON
 
-    def _iterate_weights(self, solve_front, solve_rear) -> tuple[bool, int, list]:
+    @staticmethod
+    def _restore_pitch(rotor) -> None:
+        """CROTOR label 590 (POWE): a failed solve's blade-angle change is undone."""
+        s = rotor.s
+        s.beta[:s.ii] = s.beta[:s.ii] - s.dbeta
+        s.beta0[:s.ii] = s.beta0[:s.ii] - s.dbeta
+
+    def _iterate_weights(self, solve_front, solve_rear, powe=None) -> tuple[bool, int, list]:
         """Port of CROTOR's CR iteration (SUBROUTINE CROTOR, labels 410-520). Solves front
         and rear alternately (ICRITR counts the solves), each with the profile the other
-        last left it (PUTVEL). A rotor is converged (LCONF/LCONA, never reset) once its
-        thrust changes by at most thrust_tol relative to its previous solve; then the
-        system converges (LCON) after one more solve of each, front first, ending on the
-        rear. At max_solves without that, it stops the same way (LNCON). Returns (LCON,
-        ICRITR, the relative thrust change after each solve). CROTOR's convergence menu
-        (label 590) is a PairConvergenceError here."""
+        last left it (PUTVEL). A rotor is converged (LCONF/LCONA) once its thrust changes
+        by at most thrust_tol relative to its previous solve; then the system converges
+        (LCON) after one more solve of each, front first, ending on the rear. At max_solves
+        without that, it stops the same way (LNCON). Returns (LCON, ICRITR, the relative
+        thrust change after each solve). CROTOR's convergence menu (label 590) is a
+        PairConvergenceError here, after POWE's restore of the blade angles.
+
+        powe: None for solves given as functions (the RPM command, or this package's
+        torque-split modes), else the POWE command (label 430): a dict with "power" (W,
+        POWINF, POWINA), "rpm" (RPMINF, RPMINA), "pitch" (LPITCH: blade angles fixed) and
+        "locked" (LSRPM: rpms synchronized at the gear ratio).
+          pitch False: each rotor at its rpm, blade angle set for its power, APER(3,1);
+              a converged solve with a blade-angle change over 12 deg and negative thrust
+              is a failure.
+          pitch True, locked False: blade angles fixed, each rotor's rpm found for its
+              power, APER(3,2), starting from the ADV in the COMMON.
+          pitch True, locked True: the same until either rotor has converged; then (LSWIT)
+              both run at fixed pitch and rpm, the front at (RPMFWD + RPMAFT) / (1 + gear
+              ratio) and the rear at gear ratio times that, APER(4,2), the convergence flags
+              cleared once. Total power is then only near the target (CROTOR's "(Near)
+              specified power")."""
         uwtf, vwtf, uwta, vwta = self.weights
         ttot_prev = {"front": 0.0, "rear": 0.0}     # TTOTF, TTOTA
         flag = {"front": False, "rear": False}      # LCONF, LCONA
         lcon = lncon = False
+        lswit = False                               # LSWIT
+        rpm_found = {"front": 0.0, "rear": 0.0}     # RPMFWD, RPMAFT
+        rpm_locked = {"front": 0.0, "rear": 0.0}    # RPMTF, RPMTA
         icritr = 0
         forward = False                             # LFORWARD
         hist = []
@@ -248,11 +281,45 @@ class RotorPair:
             forward = not forward
             which = "front" if forward else "rear"
             rotor, other = (self.front, self.rear) if forward else (self.rear, self.front)
-            solve = solve_front if forward else solve_rear
             self._shared_tail(last, rotor)
             last = rotor
-            if not solve(rotor):
-                raise PairConvergenceError(f"{which} rotor did not converge (solve {icritr})")
+            if powe is None:
+                solve = solve_front if forward else solve_rear
+                if not solve(rotor):
+                    raise PairConvergenceError(f"{which} rotor did not converge (solve {icritr})")
+            else:
+                s = rotor.s
+                s.pspec = powe["power"][0 if forward else 1]      # PSPEC
+                rpm = powe["rpm"][0 if forward else 1]
+                s.conv = False
+                if not powe["pitch"]:
+                    s.adv = div(s.vel, s.rad * rpm * PI / 30.0)
+                    aper(s, 3, 1, s.loprini)
+                elif not powe["locked"]:
+                    aper(s, 3, 2, s.loprini)
+                    rpm_found[which] = div(s.vel, s.rad * s.adv * PI / 30.0)
+                else:
+                    if (flag["rear"] or flag["front"]) and not lswit:
+                        rpm_locked["front"] = div(rpm_found["front"] + rpm_found["rear"],
+                                                  1.0 + self.gear_ratio)
+                        rpm_locked["rear"] = rpm_locked["front"] * self.gear_ratio
+                        lswit = True
+                        flag["front"] = flag["rear"] = lcon = False
+                    if lswit:
+                        s.adv = div(s.vel, s.rad * rpm_locked[which] * PI / 30.0)
+                        s.conv = False
+                        aper(s, 4, 2, s.loprini)
+                    else:
+                        aper(s, 3, 2, s.loprini)
+                        rpm_found[which] = div(s.vel, s.rad * s.adv * PI / 30.0)
+                bad = not s.conv
+                if s.conv and not powe["pitch"]:
+                    bad = abs(s.dbeta) > PI / 15.0 and s.ttot < 0.0
+                if bad:
+                    self._restore_pitch(rotor)
+                    why = "did not converge" if not s.conv else \
+                        "negative thrust and excessive blade angle change"
+                    raise PairConvergenceError(f"{which} rotor {why} (solve {icritr})")
             if forward:
                 self._putvel(rotor, other, uwta, vwta)
             else:
@@ -263,7 +330,10 @@ class RotorPair:
             hist.append(tdiff)
             if tdiff <= self.thrust_tol:
                 flag[which] = True
-            if flag["front"] and flag["rear"]:      # label 500
+            if flag["front"] and flag["rear"]:
+                if powe is not None and powe["pitch"] and powe["locked"] and not lswit:
+                    continue                        # on to the synchronized phase
+                # label 500
                 if not forward and not lcon:
                     continue
                 lcon = True
@@ -342,6 +412,54 @@ class RotorPair:
         wr = self._rpm_rear(rpm) * PI / 30.0
         total_q = float(power) / (torque_split * wf + (1.0 - torque_split) * wr)
         ok, n, h = self._solve_torques(*self._torques(total_q, torque_split), rpm)
+        return self._result(ok, n, h)
+
+    def solve_power_split(self, power: float, rpm: float | None = None,
+                          power_split: float = 0.5, fix: str = "rpm",
+                          locked: bool = True) -> PairResult:
+        """Shaft power (W), split between the rotors by power (front share power_split),
+        as CROTOR's POWE command does (equal halves by default):
+          fix="rpm": the front at rpm, the rear at gear_ratio * rpm; each blade angle set
+              to absorb its share (XROTOR POWE, fixed rpm).
+          fix="pitch", locked=False: blade angles fixed, each rotor turns at the rpm that
+              absorbs its share (rotors not geared together; rpm unused).
+          fix="pitch", locked=True: rotors geared together at gear_ratio (CROTOR's SYNC):
+              CROTOR's procedure, which first finds each rotor's rpm for its share, then
+              runs both at their gear-ratio average and converges at fixed pitch, so the
+              total power is only near the target ("weights" interaction only; for the
+              exact fixed-pitch power use solve_power_fixed_pitch).
+        In the "weights" interaction this is CROTOR's POWE (FIX, SYNC) bit for bit."""
+        if not 0.0 < power_split < 1.0:
+            raise ValueError("power_split must be between 0 and 1")
+        fix = fix.lower()
+        if fix not in ("rpm", "pitch"):
+            raise ValueError("fix must be 'rpm' or 'pitch'")
+        if fix == "rpm" and rpm is None:
+            raise ValueError("fix='rpm' needs the rpm")
+        pf, pa = power_split * float(power), (1.0 - power_split) * float(power)  # POWINF, POWINA
+        rf = float(rpm) if rpm is not None else 0.0
+        powe = {"power": (pf, pa), "rpm": (rf, self._rpm_rear(rf)),
+                "pitch": fix == "pitch", "locked": bool(locked)}
+        if self.interaction == "weights":
+            ok, n, h = self._iterate_weights(None, None, powe)
+            return self._result(ok, n, h)
+        if powe["pitch"] and powe["locked"]:
+            raise NotImplementedError("locked rpm at fixed pitch: use solve_power_fixed_pitch "
+                                      "(or interaction='weights' for CROTOR's procedure)")
+
+        def solver(p, r):
+            def solve(rotor):
+                s = rotor.s
+                s.pspec = p
+                s.conv = False
+                if powe["pitch"]:
+                    aper(s, 3, 2, s.loprini)
+                else:
+                    s.adv = div(s.vel, s.rad * r * PI / 30.0)
+                    aper(s, 3, 1, s.loprini)
+                return s.conv
+            return solve
+        ok, n, h = self._iterate(solver(pf, powe["rpm"][0]), solver(pa, powe["rpm"][1]))
         return self._result(ok, n, h)
 
     def solve_thrust(self, thrust: float, rpm: float, torque_split: float = 0.5,
