@@ -19,6 +19,7 @@ import math
 
 import numpy as np
 
+from . import _accel
 from . import fmath as fm
 from .aero import AERODATA_ROW, AeroSection, getalf, getclcdcm
 from .constants import IQ, PI
@@ -77,6 +78,9 @@ def tpq(s: State, itype: int) -> None:
     Not ported: momentum-theory checks (TMOM, PMOM, VAAavg, VATavg, TDIM, PDIM) that TPQ
     computes into unused locals, and the unused equivalent-prop axial velocity SW.
     """
+    if _accel.enabled and _accel.ext.state_ok(s):
+        _accel.ext.tpq(s, itype)                     # the same operations, compiled
+        return
     ii = s.ii
     secs = sections(s)
     s.tinv = s.pinv = 0.0
@@ -326,6 +330,9 @@ def tpq(s: State, itype: int) -> None:
 def apinit(s: State) -> None:
     """Port of SUBROUTINE APINIT: circulation from the blade-element lift with no induced
     velocity, then up to 10 graded-momentum passes converging the wake advance ratio."""
+    if _accel.enabled and _accel.ext.state_ok(s):
+        _accel.ext.apinit(s, gradmo, vcalc, filter_)
+        return
     ii = s.ii
     secs = sections(s)
     blds = float(s.nblds)
@@ -468,6 +475,10 @@ def apiter(s: State, ispec: int, icon: int) -> None:
     Not ported: the 0.75R "ADVFACT" correction, which 7.55 computes and then overwrites
     with 1.0 (the computation has no side effects).
     """
+    if _accel.enabled and _accel.ext.state_ok(s):
+        _accel.ext.apiter(s, ispec, icon, IQ, induced_model, vcalc, setxw, tpq, filter_,
+                          seval, deval)
+        return
     ii = s.ii
     k1, k2, k3 = ii, ii + 1, ii + 2                   # Fortran K1, K2, K3 (0-based rows)
     clmax = np.zeros(ii)

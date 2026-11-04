@@ -102,8 +102,8 @@ pip install -e ".[test]"
 pytest
 ```
 
-`pip install` also compiles a few hot loops with Cython (HELICO, GAUSS, CLCDCM), which
-halves solve times. They give bit-identical results to the pure-Python code, which is
+`pip install` also compiles the operating-point solver loop with Cython, which makes a
+solve about 8x faster (5.5 ms against the Fortran's 1.8 ms for the Rotol propeller). They give bit-identical results to the pure-Python code, which is
 used instead if there is no C compiler, or with `PYXROTOR_PURE=1`.
 
 ## How it is checked

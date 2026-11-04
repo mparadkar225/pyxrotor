@@ -13,10 +13,16 @@ from hypothesis.extra.numpy import arrays
 
 from pyxrotor import _accel
 from pyxrotor.aero import AeroSection, clcdcm
-from pyxrotor.induced import helico
+from pyxrotor.induced import helico, vcalc
 from pyxrotor.numerics import gauss
+from pyxrotor.oper import apinit, apiter, tpq
+from pyxrotor.state import State
+from pyxrotor.wake import setxw
+from rotors import perturbed_states
 from strategies import finite
 from test_induced import wake_inputs
+from test_rotor import oper_sessions, rotol_both, run_session
+from conftest import EXPENSIVE
 
 pytestmark = [pytest.mark.differential,
               pytest.mark.skipif(not _accel.available, reason="compiled speedups not built")]
@@ -30,6 +36,18 @@ def same(a, b) -> bool:
         return False
     nan = np.isnan(a) & np.isnan(b)
     return bool(np.all(nan | (a.view(np.int64) == b.view(np.int64))))
+
+
+def assert_same_state(a, b):
+    """Every COMMON variable (and the non-COMMON attributes) identical, NaN-aware."""
+    for name in State.SPEC:
+        x, y = getattr(a, name.lower()), getattr(b, name.lower())
+        if isinstance(x, np.ndarray):
+            assert x.dtype == y.dtype and same(x, y), name
+        elif isinstance(x, float) or isinstance(y, float):
+            assert same(float(x), float(y)), (name, x, y)
+        else:
+            assert x == y, (name, x, y)
 
 
 def both(fn, *args):
@@ -102,3 +120,89 @@ def test_helico(s, stale, duct, adw):
         s.adw = adw
     (_, (t1,)), (_, (t2,)) = both(helico, s)
     assert same(t1.vind_gam, t2.vind_gam) and same(t1.vind_adw, t2.vind_adw)
+
+
+def run_both(fn, s, *args):
+    """fn(state, *args) compiled and pure on copies of s; both results' states."""
+    t1, t2 = copy.deepcopy(s), copy.deepcopy(s)
+    _accel.use_compiled(True)
+    e1 = e2 = None
+    try:
+        fn(t1, *args)
+    except Exception as e:                      # noqa: BLE001 (both must fail alike)
+        e1 = type(e)
+    with _accel.pure():
+        try:
+            fn(t2, *args)
+        except Exception as e:                  # noqa: BLE001
+            e2 = type(e)
+    assert e1 == e2
+    return t1, t2
+
+
+def solver_states():
+    return perturbed_states().flatmap(lambda s: st.tuples(st.just(s), st.booleans(),
+                                                          st.booleans()))
+
+
+@SETTINGS
+@given(data=solver_states(), itype=st.sampled_from([1, 2, 3, 4]))
+def test_tpq(data, itype):
+    s, fallback, _ = data
+    s.fixes.section_fallback = fallback
+    if fallback:
+        s.iaero[: s.ii] = -1
+    assert_same_state(*run_both(tpq, s, itype))
+
+
+@SETTINGS
+@given(data=solver_states())
+def test_setxw_and_vcalc(data):
+    s, _, _ = data
+    assert_same_state(*run_both(setxw, s))
+    assert_same_state(*run_both(vcalc, s))
+
+
+@SETTINGS
+@given(s=wake_inputs(), stale=finite(-1.0, 1.0), duct=st.booleans())
+def test_helico_state(s, stale, duct):
+    s.gam[s.ii:] = stale
+    s.duct = duct
+    assert_same_state(*run_both(helico, s))
+
+
+@EXPENSIVE
+@given(data=solver_states(), ispec=st.sampled_from([1, 2, 3, 4, 5, 6]),
+       icon=st.sampled_from([1, 2]), init=st.booleans(), nitera=st.sampled_from([0, 1, 3, 40]))
+def test_apiter_apinit(data, ispec, icon, init, nitera):
+    s, free, fast = data
+    s.free, s.fast = free, fast
+    s.nitera = nitera
+    s.tspec, s.qspec, s.pspec = 3000.0, 600.0, 120e3
+    if ispec == 5 and init:                     # an engine power-rpm line
+        s.lpwrvar, s.npwrvar = True, 3
+        s.rpmvar[:3] = [600.0, 1100.0, 1600.0]
+        s.pwrvar[:3] = [60e3, 120e3, 150e3]
+        s.xpwrvar[:3] = [150.0, 120.0, 40.0]
+    if init:
+        a, b = run_both(apinit, s)
+        assert_same_state(a, b)
+        s = a
+    assert_same_state(*run_both(apiter, s, ispec, icon))
+
+
+@EXPENSIVE
+@given(session=oper_sessions())
+def test_oper_sessions_both_ways(session):
+    """Whole OPER sessions (the Rotol blade), compiled and pure."""
+    theta07, cmds = session
+    states = []
+    for compiled in (True, False):
+        _accel.use_compiled(compiled)
+        try:
+            ref, rotor = rotol_both(theta07)
+            run_session(ref, rotor, cmds)
+        finally:
+            _accel.use_compiled(True)
+        states.append(rotor.s)
+    assert_same_state(*states)

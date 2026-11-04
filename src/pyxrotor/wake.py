@@ -18,6 +18,7 @@ from typing import NamedTuple
 
 import numpy as np
 
+from . import _accel
 from . import fmath as fm
 from .fmath import div
 from .numerics import seval
@@ -145,6 +146,9 @@ def setxw(s: State) -> None:
     coordinate; angular momentum is conserved to set its swirl. Also returns, in the State,
     the sensitivities of XW, DXW and VWAK to ADV, ADW and each circulation GAM(J).
     """
+    if _accel.enabled and _accel.ext.state_ok(s):
+        _accel.ext.setxw(s)                          # the same operations, compiled
+        return
     ii = s.ii
     adv, adw, urduct = s.adv, s.adw, s.urduct
     xwm = s.xw0

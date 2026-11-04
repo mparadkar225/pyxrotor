@@ -38,6 +38,9 @@ _CROSS = {(0, 1): (1, 2), (0, 2): (-1, 1), (1, 0): (-1, 2), (1, 2): (1, 0),
 
 def vcalc(s: State) -> None:
     """Port of SUBROUTINE VCALC: VIND(k,I) = sum over J of VIND_GAM(k,I,J)*GAM(J)."""
+    if _accel.enabled and _accel.ext.state_ok(s):
+        _accel.ext.vcalc(s)
+        return
     ii = s.ii
     vsum = np.zeros((3, ii))
     for j in range(ii):                       # sequential over J, as in the Fortran
@@ -177,6 +180,9 @@ def helico(s: State) -> None:
     Written with Fortran indices: x[I] is X(I) (declared X(0:IDIM)), an_gam[I, J] is
     AN_GAM(I,J), sys_[k, I] is SYS(k+1, I); station I is s.xi[I-1].
     """
+    if _accel.enabled and _accel.ext.state_ok(s):
+        _accel.ext.helico(s, _gam_extended(s))      # the same operations, compiled
+        return
     idim = 150
     ii, nblds, adw = s.ii, s.nblds, s.adw
     gam = _gam_extended(s)                     # GAM(I) is gam[I-1]

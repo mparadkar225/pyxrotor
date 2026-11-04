@@ -79,7 +79,10 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
 ## Compiled hot loops (optional)
 
 `src/pyxrotor/_speedups.pyx` (Cython, built by `setup.py` with `-ffp-contract=off`, no
-fast-math) has compiled versions of HELICO's harmonic loop, GAUSS and CLCDCM.
+fast-math) has compiled versions of the OPER solver loop: APITER, APINIT, TPQ, SETXW,
+VCALC, HELICO, and (inside them) CSCALC, UVADD, SEVAL, GETCLCDCM, GETALF, CLCDCM; also
+GAUSS. GRADMO, VRTXCO, FILTER and the design routines (DESI) stay Python; the compiled
+APITER/APINIT call them, and the dispatching TPQ/SETXW/HELICO, back through Python.
 `pyxrotor._accel` picks them when built; `PYXROTOR_PURE=1` (at install: don't build; at
 run time: don't use) or `_accel.pure()` runs the pure Python, which stays the reference.
 * The two must be bit-identical: same operations in the same order, IEEE division
@@ -88,7 +91,11 @@ run time: don't use) or `_accel.pure()` runs the pure Python, which stays the re
   non-finite inputs included; CI runs the whole suite both ways.
 * Change a routine in both places, or move only the Python and drop the compiled
   dispatch. Rebuild after editing the .pyx: `python setup.py build_ext --inplace`.
-* `pure` vs `compiled` on the Rotol OPER RPM solve: 38 ms vs 19 ms (the Fortran: 2 ms).
+* The State's scalars must become C doubles before any arithmetic: Cython does Python
+  float arithmetic on object attributes (`s.pwak`), which raises ZeroDivisionError where C
+  gives inf (found by test_oper_sessions). Arrays go through `load_ctx`/`state_ok`: a State
+  whose arrays aren't C-contiguous float64 (stall bool, iaero int64) runs the Python.
+* `pure` vs `compiled` on the Rotol OPER RPM solve: 44 ms vs 5.5 ms (the Fortran: 1.8 ms).
 
 ## Reference harness facts
 
