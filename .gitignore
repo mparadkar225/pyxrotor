@@ -9,3 +9,5 @@ dist/
 .venv/
 .coverage
 junit.xml
+src/pyxrotor/_speedups.c
+src/pyxrotor/*.so

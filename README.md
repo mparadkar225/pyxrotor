@@ -102,6 +102,10 @@ pip install -e ".[test]"
 pytest
 ```
 
+`pip install` also compiles a few hot loops with Cython (HELICO, GAUSS, CLCDCM), which
+halves solve times. They give bit-identical results to the pure-Python code, which is
+used instead if there is no C compiler, or with `PYXROTOR_PURE=1`.
+
 ## How it is checked
 
 * **Against the Fortran** (`tests/differential/`): each ported routine is run beside the

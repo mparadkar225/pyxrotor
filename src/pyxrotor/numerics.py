@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from . import _accel
 from .fmath import div
 
 
@@ -28,6 +29,10 @@ def gauss(z: np.ndarray, r: np.ndarray, nn: int) -> None:
     """
     if r.ndim == 1:
         r = r[:, None]                                 # a view: updates the caller's array
+    if (_accel.enabled and z.dtype == np.float64 and r.dtype == np.float64
+            and z.flags.c_contiguous and r.flags.c_contiguous):
+        _accel.ext.gauss(z, r, nn)                      # the same operations, compiled
+        return
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         for np_ in range(nn - 1):                       # NP = np_+1
             np1 = np_ + 1

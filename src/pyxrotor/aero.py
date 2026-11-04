@@ -22,6 +22,7 @@ from typing import NamedTuple, Sequence
 
 import numpy as np
 
+from . import _accel
 from . import fmath as fm
 from .fmath import div as _div, pow as _pow   # names used throughout this module
 
@@ -107,6 +108,8 @@ def clcdcm(alf: float, w: float, rey: float, vel: float, vso: float, sec: AeroSe
     rey <= 0 disables Reynolds-number scaling of CD.
     """
     alf, w, rey, vel, vso = float(alf), float(w), float(rey), float(vel), float(vso)
+    if _accel.enabled:
+        return SectionAero(*_accel.ext.clcdcm(alf, w, rey, vel, vso, sec))
     a0, clmax, clmin = sec.a0, sec.clmax, sec.clmin
     dclda, dclda_stall, dcl_stall = sec.dclda, sec.dclda_stall, sec.dcl_stall
     cdmin, cldmin, dcdcl2, cmcon = sec.cdmin, sec.cldmin, sec.dcdcl2, sec.cmcon

@@ -76,6 +76,20 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
    source routine in each docstring. Code with no effect on state (unused locals, prints,
    plotting) may be omitted; say so in the docstring.
 
+## Compiled hot loops (optional)
+
+`src/pyxrotor/_speedups.pyx` (Cython, built by `setup.py` with `-ffp-contract=off`, no
+fast-math) has compiled versions of HELICO's harmonic loop, GAUSS and CLCDCM.
+`pyxrotor._accel` picks them when built; `PYXROTOR_PURE=1` (at install: don't build; at
+run time: don't use) or `_accel.pure()` runs the pure Python, which stays the reference.
+* The two must be bit-identical: same operations in the same order, IEEE division
+  (`cdivision=True` = `fmath.div`), fmath's MIN/MAX and NaN conventions (sqrt/log of a
+  negative give +NaN). `tests/differential/test_speedups.py` compares them directly,
+  non-finite inputs included; CI runs the whole suite both ways.
+* Change a routine in both places, or move only the Python and drop the compiled
+  dispatch. Rebuild after editing the .pyx: `python setup.py build_ext --inplace`.
+* `pure` vs `compiled` on the Rotol OPER RPM solve: 38 ms vs 19 ms (the Fortran: 2 ms).
+
 ## Reference harness facts
 
 * `Ref755()` loads a private copy of the library, so instances never share state.
