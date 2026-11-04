@@ -22,7 +22,8 @@ used as a library and verified routine by routine against the original Fortran.
 | DESI design (`SETCLD`, `DESINI`, `DEITER`, `DESGEN`) and commands `INPU`, `EDIT`, `FORM`, `ITER`, `N` | Ported, bit-identical (stale-section bug reproduced; fix optional) |
 | MODI | To do |
 | **Beyond XROTOR:** induced-velocity field off the disk (`Rotor.induced_field()`), the base for rotor-rotor interaction | New model, validated against exact limits and an independent discrete vortex wake (`tests/model`) |
-| **Beyond XROTOR:** contra-rotating and tandem pairs (`RotorPair`): coupled solve; fixed pitch, power or thrust with a torque split, power at fixed pitch; gear ratio; shared nacelle | New model, validated by limits (`tests/model/test_pair.py`); tunnel data next |
+| **Beyond XROTOR:** contra-rotating and tandem pairs (`RotorPair`): coupled solve; fixed pitch, power or thrust with a torque split, power at fixed pitch; gear ratio; shared nacelle | New model, validated by limits (`tests/model/test_pair.py`) and NACA Report 747 tunnel data |
+| CROTOR's counter-rotation iteration (`RotorPair(interaction="weights")`: VPUT/VGET with fixed weights, CROTOR 755-ES1.3 `CROT` `RPM`) | Ported, bit-identical to a shim transcription of crotor.f; it is the field model's zero-spacing limit |
 | BEND, NOIS, xrotor.def, PVAR files | To do |
 
 ```python
@@ -75,6 +76,13 @@ Each rotor is a full XROTOR solve that sees the other's averaged induced velocit
 actual spacing (axial only ahead of a disk; the slipstream's axial velocity and swirl
 behind it). The two are iterated to convergence. Not modeled yet: slipstream contraction,
 viscous wakes, blade-passing unsteadiness.
+
+`RotorPair(front, rear, 0.0, interaction="weights")` couples the rotors the way XROTOR
+itself can, as Philip Carter's CROTOR automates it: each rotor's VPUT slipstream is imposed
+on the other with fixed weights (default front 0.5 axial, no swirl; rear 0.5 axial, swirl
+-1), alternating solves until each thrust settles to 0.1%. It reproduces CROTOR bit for bit
+and is what the field model tends to as the spacing goes to zero (error about 1e-4 per
+1e-4 R); at 0.1-0.2 R the field model puts 5-9% more of the thrust on the front rotor.
 
 ## 7.55 bugs and fixes
 

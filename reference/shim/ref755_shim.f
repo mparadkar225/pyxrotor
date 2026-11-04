@@ -974,3 +974,358 @@ C---- list-directed WRITE of A(1..N) into COMMON SAVFIL//FNAME (probe)
       FNAME = L(81:160)
       RETURN
       END ! REFLDW
+
+
+
+C=======================================================================
+C     CROTOR counter-rotation iteration (Philip Carter, Esotec,
+C     crotor.f v0.85 in CROTOR 755-ES1.3, GPL v2 or later), transcribed
+C     for the RPM command: LOADF/LOADA, STORCR, LOADCR, PUTVEL and the
+C     iteration loop (labels 400-520). CROTOR's own COMMON variables
+C     (ES XROTOR.INC) live in /CRSHIM/ here. Not transcribed: NAME and
+C     the file names (no effect on the numbers), output and plots, and
+C     the convergence menu (label 590): a solve that fails returns
+C     LOK = .FALSE.
+C=======================================================================
+      SUBROUTINE REFCRLOAD(ICR)
+C---- LFWD (ICR=1) / LAFT (ICR=2) from the file FNAME (LOADF/LOADA)
+      INCLUDE 'XROTOR.INC'
+      LOGICAL LFWD
+      COMMON /CRSHIM/ RADCR(2),RAKECR(2),XI0CR(2),XW0CR(2),
+     &  XICR(2,IX),CHCR(2,IX),BETACR(2,IX),BETA0CR(2,IX),
+     &  UBODYCR(2,IX),
+     &  RADDF(IX),UADDF(IX),VADDF(IX),UADDRF(IX),VADDRF(IX),
+     &  RADDA(IX),UADDA(IX),VADDA(IX),UADDRA(IX),VADDRA(IX),
+     &  VELCR,IICR(2),NBLDCR(2),NADDF,NADDA,LFWD
+      CHARACTER*80 F
+C
+      F = FNAME
+      CALL LOAD(F)
+      VEL = VELCR
+C
+      IF(ICR.EQ.1) THEN
+        NADDF = NADD
+        DO 100 I=1,NADD
+          RADDF(I)  = RADD(I)
+          UADDF(I)  = UADD(I)
+          VADDF(I)  = VADD(I)
+          UADDRF(I) = UADDR(I)
+          VADDRF(I) = VADDR(I)
+ 100    CONTINUE
+        CALL CRSTOR(1)
+        LFWD = .TRUE.
+      ELSE
+        NADDA = NADD
+        DO 200 I=1,NADD
+          RADDA(I)  = RADD(I)
+          UADDA(I)  = UADD(I)
+          VADDA(I)  = VADD(I)
+          UADDRA(I) = UADDR(I)
+          VADDRA(I) = VADDR(I)
+ 200    CONTINUE
+        CALL CRSTOR(2)
+        LFWD = .FALSE.
+      ENDIF
+      RETURN
+      END ! REFCRLOAD
+
+
+
+      SUBROUTINE REFCRVCLR
+C---- VCLR: zero the stored and current external slipstreams
+      INCLUDE 'XROTOR.INC'
+      LOGICAL LFWD
+      COMMON /CRSHIM/ RADCR(2),RAKECR(2),XI0CR(2),XW0CR(2),
+     &  XICR(2,IX),CHCR(2,IX),BETACR(2,IX),BETA0CR(2,IX),
+     &  UBODYCR(2,IX),
+     &  RADDF(IX),UADDF(IX),VADDF(IX),UADDRF(IX),VADDRF(IX),
+     &  RADDA(IX),UADDA(IX),VADDA(IX),UADDRA(IX),VADDRA(IX),
+     &  VELCR,IICR(2),NBLDCR(2),NADDF,NADDA,LFWD
+      NADD  = 0
+      NADDF = 0
+      NADDA = 0
+      CONV = .FALSE.
+      RETURN
+      END ! REFCRVCLR
+
+
+
+      SUBROUTINE CRSTOR(J)
+C---- STORCR: store blade geometry for the CR iteration
+      INCLUDE 'XROTOR.INC'
+      LOGICAL LFWD
+      COMMON /CRSHIM/ RADCR(2),RAKECR(2),XI0CR(2),XW0CR(2),
+     &  XICR(2,IX),CHCR(2,IX),BETACR(2,IX),BETA0CR(2,IX),
+     &  UBODYCR(2,IX),
+     &  RADDF(IX),UADDF(IX),VADDF(IX),UADDRF(IX),VADDRF(IX),
+     &  RADDA(IX),UADDA(IX),VADDA(IX),UADDRA(IX),VADDRA(IX),
+     &  VELCR,IICR(2),NBLDCR(2),NADDF,NADDA,LFWD
+      RADCR(J)  = RAD
+      RAKECR(J) = RAKE
+      XI0CR(J)  = XI0
+      XW0CR(J)  = XW0
+      IICR(J)   = II
+      NBLDCR(J) = NBLDS
+      DO I=1, II
+        XICR(J,I)    = XI(I)
+        CHCR(J,I)    = CH(I)
+        BETACR(J,I)  = BETA(I)
+        BETA0CR(J,I) = BETA0(I)
+        UBODYCR(J,I) = UBODY(I)
+      END DO
+      RETURN
+      END ! CRSTOR
+
+
+
+      SUBROUTINE CRLOAD(J)
+C---- LOADCR: load geometry and slipstream for the CR iteration
+      INCLUDE 'XROTOR.INC'
+      LOGICAL LFWD
+      COMMON /CRSHIM/ RADCR(2),RAKECR(2),XI0CR(2),XW0CR(2),
+     &  XICR(2,IX),CHCR(2,IX),BETACR(2,IX),BETA0CR(2,IX),
+     &  UBODYCR(2,IX),
+     &  RADDF(IX),UADDF(IX),VADDF(IX),UADDRF(IX),VADDRF(IX),
+     &  RADDA(IX),UADDA(IX),VADDA(IX),UADDRA(IX),VADDRA(IX),
+     &  VELCR,IICR(2),NBLDCR(2),NADDF,NADDA,LFWD
+C
+      IF(J .EQ. 1) THEN
+         K = 2
+      ELSE
+         K = 1
+      ENDIF
+C--- Store blade angles of outgoing rotor
+      IF(LFWD) THEN
+        IF(J.NE.1) THEN
+          DO I=1,II
+            BETACR(K,I) = BETA(I)
+            BETA0CR(K,I)= BETA0(I)
+          ENDDO
+        ELSE
+          DO I=1,II
+            BETACR(J,I) = BETA(I)
+            BETA0CR(J,I)= BETA0(I)
+          ENDDO
+        ENDIF
+      ELSE
+        IF(J.NE.2) THEN
+          DO I=1,II
+            BETACR(K,I) = BETA(I)
+            BETA0CR(K,I)= BETA0(I)
+          ENDDO
+        ELSE
+          DO I=1,II
+            BETACR(J,I) = BETA(I)
+            BETA0CR(J,I)= BETA0(I)
+          ENDDO
+        ENDIF
+      ENDIF
+C--- Read in new geometry
+      RAD   = RADCR(J)
+      RAKE  = RAKECR(J)
+      XI0   = XI0CR(J)
+      XW0   = XW0CR(J)
+      II    = IICR(J)
+      NBLDS = NBLDCR(J)
+      DO I=1, II
+        XI(I)    = XICR(J,I)
+        CH(I)    = CHCR(J,I)
+        BETA(I)  = BETACR(J,I)
+        BETA0(I) = BETA0CR(J,I)
+        UBODY(I) = UBODYCR(J,I)
+      END DO
+C--- load imposed velocity profiles
+      IF(J .EQ. 1) THEN
+         LFWD = .TRUE.
+         NADD = NADDF
+         DO I=1,NADD
+           RADD(I)  = RADDF(I)
+           UADD(I)  = UADDF(I)
+           VADD(I)  = VADDF(I)
+           UADDR(I) = UADDRF(I)
+           VADDR(I) = VADDRF(I)
+         ENDDO
+      ELSE
+         LFWD = .FALSE.
+         NADD = NADDA
+         DO I=1,NADD
+           RADD(I)  = RADDA(I)
+           UADD(I)  = UADDA(I)
+           VADD(I)  = VADDA(I)
+           UADDR(I) = UADDRA(I)
+           VADDR(I) = VADDRA(I)
+         ENDDO
+      ENDIF
+      IINF = II + II/2
+      CALL SETIAERO
+      RETURN
+      END ! CRLOAD
+
+
+
+      SUBROUTINE CRPUTV(UWTF,VWTF,UWTA,VWTA)
+C---- PUTVEL: weighted slipstream of the current rotor, stored for
+C---- the other one
+      INCLUDE 'XROTOR.INC'
+      LOGICAL LFWD
+      COMMON /CRSHIM/ RADCR(2),RAKECR(2),XI0CR(2),XW0CR(2),
+     &  XICR(2,IX),CHCR(2,IX),BETACR(2,IX),BETA0CR(2,IX),
+     &  UBODYCR(2,IX),
+     &  RADDF(IX),UADDF(IX),VADDF(IX),UADDRF(IX),VADDRF(IX),
+     &  RADDA(IX),UADDA(IX),VADDA(IX),UADDRA(IX),VADDRA(IX),
+     &  VELCR,IICR(2),NBLDCR(2),NADDF,NADDA,LFWD
+C
+      NADD=II
+      NADDA=NADD
+      NADDF=NADD
+C
+      BLDS = FLOAT(NBLDS)
+      DO 10 I=1, II
+        VT = BLDS*GAM(I)/(4.0*PI*XI(I))
+        VA = VT*XI(I)/ADW
+        UDUCT     = 0.0
+        VADUCT_VA = 1.0
+        IF(DUCT) THEN
+          UDUCT = URDUCT-1.0
+          VADUCT_VA = 2.0*URDUCT
+        ENDIF
+        VA = VA * VADUCT_VA
+        UTOT = 1.0 + UDUCT + UBODY(I)
+        CALL UVADD(XI(I),WA,WT)
+        CI = XI(I)/ADV - WT  -  VT
+        SI = UTOT      + WA  +  VA
+        RDIM = XI(I)*RAD
+        UDIM =  2.0*(SI - (UTOT      + WA))*VEL
+        VDIM = -2.0*(CI - (XI(I)/ADV - WT))*VEL
+        IF(LFWD) THEN
+          RADDA(I)=RDIM
+          UADDA(I)=UDIM * UWTA
+          VADDA(I)=VDIM * VWTA
+        ELSE
+          RADDF(I)=RDIM
+          UADDF(I)=UDIM * UWTF
+          VADDF(I)=VDIM * VWTF
+        ENDIF
+ 10   CONTINUE
+      IF(LFWD) THEN
+        CALL SPLINE(UADDA,UADDRA,RADDA,NADDA)
+        CALL SPLINE(VADDA,VADDRA,RADDA,NADDA)
+      ELSE
+        CALL SPLINE(UADDF,UADDRF,RADDF,NADDF)
+        CALL SPLINE(VADDF,VADDRF,RADDF,NADDF)
+      ENDIF
+      RETURN
+      END ! CRPUTV
+
+
+
+      SUBROUTINE REFCRRPM(RPMF,RRAT,VELIN,ICRITL,CRCON,
+     &                    UWTF,VWTF,UWTA,VWTA,
+     &                    NSOLV,TDHIST,LCONO,LOK,GAMF,TTF,PTF)
+C-----------------------------------------------------------------------
+C     INPU (rpm and flight speed; synchronized rpm, ratio RRAT), then
+C     the RPM command (crotor.f label 400, COMAND = 'RPM ', no input).
+C     Outputs: NSOLV rotor solves (ICRITR), TDHIST(k) the thrust change
+C     DEL_THRUST/THRUST after solve k, LCONO = LCON (system converged),
+C     LOK = every solve converged, and the forward rotor's final GAM,
+C     TTOT, PTOT (COMMON holds the aft rotor at the end).
+C-----------------------------------------------------------------------
+      INCLUDE 'XROTOR.INC'
+      LOGICAL LFWD
+      COMMON /CRSHIM/ RADCR(2),RAKECR(2),XI0CR(2),XW0CR(2),
+     &  XICR(2,IX),CHCR(2,IX),BETACR(2,IX),BETA0CR(2,IX),
+     &  UBODYCR(2,IX),
+     &  RADDF(IX),UADDF(IX),VADDF(IX),UADDRF(IX),VADDRF(IX),
+     &  RADDA(IX),UADDA(IX),VADDA(IX),UADDRA(IX),VADDRA(IX),
+     &  VELCR,IICR(2),NBLDCR(2),NADDF,NADDA,LFWD
+      DIMENSION TDHIST(*), GAMF(IX)
+      LOGICAL LCONO, LOK, LCONF, LCONA, LCON, LNCON, LFORWARD
+C
+C---- INPU (label 100), rpm and speed part
+      RPMA = RPMF * RRAT
+      VELOLD = VEL
+      VELCR = VELIN
+      VEL = VELCR
+      THR  = TTOT *(RHO*VELOLD**2*RAD**2)
+      TTOT = THR / (RHO*VEL**2*RAD**2)
+      TRQ  = QTOT *(RHO*VELOLD**2*RAD**3)
+      QTOT = TRQ / (RHO*VEL**2*RAD**3)
+      PWR  = PTOT *(RHO*VELOLD**3*RAD**2)
+      PTOT = PWR / (RHO*VEL**3*RAD**2)
+C
+C---- label 400
+      LCONF  = .FALSE.
+      LCONA  = .FALSE.
+      LCON   = .FALSE.
+      LNCON  = .FALSE.
+      TTOTF  = 0.0
+      TTOTA  = 0.0
+      ICRITR = 0
+      RPMINF = RPMF
+      RPMINA = RPMA
+      LOK = .TRUE.
+C
+      LFORWARD=.FALSE.
+ 410  ICRITR = ICRITR + 1
+      LFORWARD = .NOT.LFORWARD
+      IF(LFORWARD) THEN
+         CALL CRLOAD(1)
+      ELSE
+         CALL CRLOAD(2)
+      ENDIF
+C
+C---- label 440: RPM, constant pitch and rpm
+      IF(LFWD)THEN
+         RPM = RPMINF
+      ELSE
+         RPM = RPMINA
+      ENDIF
+      ADV = VEL / (RAD*RPM*PI/30.)
+      CONV = .FALSE.
+      CALL APER(4,2,LOPRINI)
+      IF(.NOT.CONV) THEN
+        LOK = .FALSE.
+        GO TO 600
+      ENDIF
+C
+      CALL CRPUTV(UWTF,VWTF,UWTA,VWTA)
+C
+      IF(LFWD) THEN
+         TDIFF = ABS((TTOT-TTOTF)/TTOT)
+         TTOTF = TTOT
+         DO I=1, II
+           GAMF(I) = GAM(I)
+         ENDDO
+         TTF = TTOT
+         PTF = PTOT
+      ELSE
+         TDIFF = ABS((TTOT-TTOTA)/TTOT)
+         TTOTA = TTOT
+      END IF
+      TDHIST(ICRITR) = TDIFF
+C
+      IF(TDIFF .LE. CRCON) THEN
+         IF (LFWD) THEN
+            LCONF = .TRUE.
+         ELSE
+            LCONA = .TRUE.
+         END IF
+      END IF
+C
+      IF(LCONF .AND. LCONA) GO TO 500
+      IF(ICRITR .GE. ICRITL) GO TO 510
+      GO TO 410
+C
+ 500  IF (.NOT.LFWD .AND. .NOT.LCON)  GO TO 410
+      LCON  = .TRUE.
+      GO TO 520
+C
+ 510  IF (.NOT.LFWD .AND. .NOT.LNCON) GO TO 410
+      LNCON = .TRUE.
+C
+ 520  IF(LFWD) GO TO 410
+C
+ 600  NSOLV = ICRITR
+      LCONO = LCON
+      RETURN
+      END ! REFCRRPM

@@ -10,7 +10,19 @@ imposed inflow too (through its "equivalent prop"), so each rotor's own wake pit
 to the other rotor.
 
 The two solves are iterated, with under-relaxation of the imposed inflow, until the
-imposed velocities stop changing. Operating conditions (RotorPair.solve_*):
+imposed velocities stop changing.
+
+interaction="weights" replaces the field with XROTOR's own coupling, as CROTOR automates
+it (Philip Carter's counter-rotation extension, crotor.f v0.85 in CROTOR 755-ES1.3, GPL v2
+or later; a port, checked bit for bit against a transcription in the reference shim): each
+rotor's VPUT slipstream (far-downstream velocities at the disk radii) is imposed on the
+other with fixed weights, the default being CROTOR's close-spacing set (front: axial 0.5,
+swirl 0; rear: axial 0.5, swirl -1 for counter-rotation). The spacing does not enter. The
+rotors are solved alternately, front first, starting from the profiles they already carry
+(CROTOR's LFWD/LAFT take them from the restart files), with no relaxation, until each
+rotor's thrust changes by at most thrust_tol from its previous solve, and then each is
+solved once more (CROTOR's RPM command). These weights are the field model's zero-spacing
+limit (tests/model/test_pair.py). Operating conditions (RotorPair.solve_*):
     solve_rpm(rpm)                         both blade angles fixed, rpm given
     solve_power(power, rpm, torque_split)  rpm and shaft power given, pitch of each rotor
                                            set to give the torque split (0.5: equal torque)
@@ -34,7 +46,10 @@ import numpy as np
 
 from .constants import PI
 from .field import InducedField
+from .fmath import div
+from .numerics import spline
 from .slipstream import set_profile
+from .wake import uvadd
 
 
 class PairConvergenceError(RuntimeError):
@@ -65,17 +80,35 @@ class RotorPair:
     front, rear: Rotor objects already set up (sections, blade, atmosphere, nacelle UBODY if
     any). counter_rotating: the rear turns the other way (else a co-rotating tandem).
     The pair writes each rotor's imposed slipstream (NADD, RADD, UADD, VADD), replacing any
-    profile set before.
+    profile set before (in the "weights" interaction, starting from it).
+
+    interaction: "field" (the induced field at the spacing; relaxation, tol, max_iter
+    apply) or "weights" (CROTOR's VPUT/VGET coupling; weights, thrust_tol, max_solves
+    apply). weights = (front axial, front swirl, rear axial, rear swirl), CROTOR's UWTF,
+    VWTF, UWTA, VWTA; default (0.5, 0.0, 0.5, -1.0), with the rear swirl weight +1.0 for a
+    co-rotating pair. thrust_tol and max_solves are CROTOR's CCON (0.001) and CRIT (20,
+    counted in single-rotor solves).
     """
 
     def __init__(self, front, rear, spacing: float, counter_rotating: bool = True,
                  gear_ratio: float = 1.0, relaxation: float = 0.7, tol: float = 1e-6,
-                 max_iter: int = 60):
+                 max_iter: int = 60, interaction: str = "field", weights=None,
+                 thrust_tol: float = 1e-3, max_solves: int = 20):
         self.front, self.rear = front, rear
         self.spacing = float(spacing)
         if self.spacing < 0.0:
             raise ValueError("spacing must be >= 0 (rear behind front)")
         self.sign = -1.0 if counter_rotating else 1.0
+        if interaction not in ("field", "weights"):
+            raise ValueError("interaction must be 'field' or 'weights'")
+        self.interaction = interaction
+        if weights is None:
+            weights = (0.5, 0.0, 0.5, self.sign)
+        self.weights = tuple(float(w) for w in weights)
+        if len(self.weights) != 4:
+            raise ValueError("weights = (front axial, front swirl, rear axial, rear swirl)")
+        self.thrust_tol = float(thrust_tol)
+        self.max_solves = int(max_solves)
         self.gear_ratio = float(gear_ratio)
         self.relaxation = float(relaxation)
         self.tol = float(tol)
@@ -133,6 +166,118 @@ class RotorPair:
 
     # ------------------------------------------------------------------ iteration
     def _iterate(self, solve_front, solve_rear) -> tuple[bool, int, list]:
+        if self.interaction == "weights":
+            return self._iterate_weights(solve_front, solve_rear)
+        return self._iterate_field(solve_front, solve_rear)
+
+    @staticmethod
+    def _putvel(rotor, onto, axial_weight: float, swirl_weight: float) -> None:
+        """Port of CROTOR's SUBROUTINE PUTVEL (crotor.f): the solved rotor's slipstream
+        (SAVVEL's far-downstream induced velocities at its disk radii), weighted and splined,
+        becomes the other rotor's imposed profile (CROTOR stores it, and LOADCR loads it
+        before that rotor's next solve). Same values as slipstream.profile except for a
+        ducted rotor, where PUTVEL forms VA*VADUCT_VA rather than VA + VD.
+
+        CROTOR: PUTVEL sets NADD = II before its UVADD calls, so the solved rotor's own
+        inflow is read over its first II profile entries, whatever its profile length (stale
+        entries after VCLR, which zeroes only the counts). WA and WT cancel from the result
+        algebraically, so this only changes rounding; reproduced, and left in the solved
+        rotor's State as in the COMMON."""
+        s, o = rotor.s, onto.s
+        ii = s.ii
+        s.nadd = ii                                    # CROTOR: NADD=II
+        blds = float(s.nblds)
+        uduct, vaduct_va = 0.0, 1.0
+        if s.duct:
+            uduct = s.urduct - 1.0
+            vaduct_va = 2.0 * s.urduct
+        r = np.empty(ii)
+        u = np.empty(ii)
+        v = np.empty(ii)
+        for i in range(ii):
+            xi = float(s.xi[i])
+            vt = div(blds * float(s.gam[i]), (4.0 * PI) * xi)
+            va = div(vt * xi, s.adw)
+            va = va * vaduct_va
+            utot = 1.0 + uduct + float(s.ubody[i])
+            wa, wt = uvadd(s, xi)
+            ci = div(xi, s.adv) - wt - vt
+            si = utot + wa + va
+            r[i] = xi * s.rad                                  # RDIM
+            u[i] = (2.0 * (si - (utot + wa))) * s.vel          # UDIM
+            v[i] = (-2.0 * (ci - (div(xi, s.adv) - wt))) * s.vel   # VDIM
+        o.nadd = ii
+        o.radd[:ii] = r
+        o.uadd[:ii] = u * axial_weight
+        o.vadd[:ii] = v * swirl_weight
+        o.uaddr[:ii] = spline(o.uadd[:ii], o.radd[:ii], ii)
+        o.vaddr[:ii] = spline(o.vadd[:ii], o.radd[:ii], ii)
+
+    @staticmethod
+    def _shared_tail(last, rotor) -> None:
+        """CROTOR: both rotors share XROTOR's COMMON, and LOADCR copies only the first NADD
+        entries of a rotor's stored profile into it, so the entries beyond come from the
+        rotor in the COMMON before (the last one solved, or loaded). PUTVEL reads them
+        (NADD=II). Reproduced by copying them into this rotor's State."""
+        if last is rotor:
+            return
+        a, b = last.s, rotor.s
+        n = b.nadd
+        for k in ("radd", "uadd", "vadd", "uaddr", "vaddr"):
+            getattr(b, k)[n:] = getattr(a, k)[n:]
+
+    def _iterate_weights(self, solve_front, solve_rear) -> tuple[bool, int, list]:
+        """Port of CROTOR's CR iteration (SUBROUTINE CROTOR, labels 410-520). Solves front
+        and rear alternately (ICRITR counts the solves), each with the profile the other
+        last left it (PUTVEL). A rotor is converged (LCONF/LCONA, never reset) once its
+        thrust changes by at most thrust_tol relative to its previous solve; then the
+        system converges (LCON) after one more solve of each, front first, ending on the
+        rear. At max_solves without that, it stops the same way (LNCON). Returns (LCON,
+        ICRITR, the relative thrust change after each solve). CROTOR's convergence menu
+        (label 590) is a PairConvergenceError here."""
+        uwtf, vwtf, uwta, vwta = self.weights
+        ttot_prev = {"front": 0.0, "rear": 0.0}     # TTOTF, TTOTA
+        flag = {"front": False, "rear": False}      # LCONF, LCONA
+        lcon = lncon = False
+        icritr = 0
+        forward = False                             # LFORWARD
+        hist = []
+        last = self.rear                            # in the COMMON after LFWD, LAFT
+        while True:
+            icritr += 1
+            forward = not forward
+            which = "front" if forward else "rear"
+            rotor, other = (self.front, self.rear) if forward else (self.rear, self.front)
+            solve = solve_front if forward else solve_rear
+            self._shared_tail(last, rotor)
+            last = rotor
+            if not solve(rotor):
+                raise PairConvergenceError(f"{which} rotor did not converge (solve {icritr})")
+            if forward:
+                self._putvel(rotor, other, uwta, vwta)
+            else:
+                self._putvel(rotor, other, uwtf, vwtf)
+            ttot = rotor.s.ttot
+            tdiff = abs(div(ttot - ttot_prev[which], ttot))
+            ttot_prev[which] = ttot
+            hist.append(tdiff)
+            if tdiff <= self.thrust_tol:
+                flag[which] = True
+            if flag["front"] and flag["rear"]:      # label 500
+                if not forward and not lcon:
+                    continue
+                lcon = True
+            elif icritr >= self.max_solves:         # label 510
+                if not forward and not lncon:
+                    continue
+                lncon = True
+            else:
+                continue
+            if forward:                             # label 520: the aft rotor last
+                continue
+            return lcon, icritr, hist
+
+    def _iterate_field(self, solve_front, solve_rear) -> tuple[bool, int, list]:
         """Fixed-point iteration: front, then rear, each solved with the other's latest
         field, the imposed inflow under-relaxed. Converged when the largest change of the
         imposed velocities (before relaxation), over both rotors, is below tol * VEL.
@@ -283,9 +428,13 @@ class RotorPair:
         rmax = max(self.front.s.rad, self.rear.s.rad)
         r = np.linspace(0.0, rmax, 401)[1:]
         zfar = 1.0e3 * rmax
-        u, _, v = self.field(r, zfar)
-        dr = r[1] - r[0]
-        swirl_flux = float(np.add.reduce(0.5 * s.rho * v * v * (s.vel + u) * 2.0 * PI * r * dr))
+        if self.front.s.duct or self.rear.s.duct:      # InducedField has no duct model
+            v = np.full_like(r, np.nan)
+            swirl_flux = float("nan")
+        else:
+            u, _, v = self.field(r, zfar)
+            dr = r[1] - r[0]
+            swirl_flux = float(np.add.reduce(0.5 * s.rho * v * v * (s.vel + u) * 2.0 * PI * r * dr))
         return PairResult(
             converged=bool(ok), iterations=int(n), front=pf, rear=pr,
             thrust=t, power=p, efficiency=(t * s.vel / p) if p else float("nan"),

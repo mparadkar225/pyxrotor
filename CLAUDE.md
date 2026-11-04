@@ -246,6 +246,15 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   * Coincident co-rotating rows are 2-3% below a rotor with twice the blades (each row's
     tip loss is the 2-blade one).
   * Equal-torque contra-rotation leaves no net far-wake angular momentum.
+* `RotorPair(interaction="weights")` is a port, not a new model: CROTOR's CR iteration
+  (crotor.f v0.85, CROTOR 755-ES1.3, GPL v2+, github.com/mparadkar225/crotor; its XROTOR is
+  7.55 with the solver unchanged). The oracle is the shim's transcription (REFCRLOAD,
+  REFCRVCLR, REFCRRPM; CROTOR's own COMMON is /CRSHIM/), `tests/differential/test_crotor.py`.
+  CROTOR shares one COMMON between the rotors, and two leaks matter bitwise: LOADCR copies
+  only NADD profile entries (the rest stay from the rotor solved before, `_shared_tail`),
+  and PUTVEL sets NADD = II before its UVADD calls (WA/WT cancel, so rounding only). Its
+  default weights are the field model's zero-spacing limit, to first order in the spacing
+  (`test_zero_spacing_is_crotors_weights`). Sample rotors: `tests/data/crotor/`.
 * NACA Report 747 (`validation/naca747`, `tests/measurement/test_naca747.py`): the tested
   "single" 4-blade propeller is two 2-blade hubs co-rotating 0.16 R apart, so model it as a
   co-rotating RotorPair. Dual-minus-single peak efficiency matches (+0.022/+0.029 at 45/50°,

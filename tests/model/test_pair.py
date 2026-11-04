@@ -1,12 +1,15 @@
 """The contra-rotating pair solver (pyxrotor.pair): limits it must reach exactly or nearly,
 and its operating modes' targets. Each limit ties the pair back to something independent:
 the isolated XROTOR rotor, XROTOR's own VPUT/VGET procedure, a single rotor with twice the
-blades, and angular-momentum conservation."""
+blades, angular-momentum conservation, and CROTOR's VPUT/VGET weights."""
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from pyxrotor.constants import PI
 from pyxrotor.pair import PairConvergenceError, RotorPair
+from pyxrotor.rotor import Rotor
 from test_rotor import rotol_both
 
 pytestmark = pytest.mark.model
@@ -157,3 +160,51 @@ def test_nonconvergence_is_reported():
     assert not res.converged and res.iterations == 2
     with pytest.raises(PairConvergenceError):
         RotorPair(rotol(), rotol(), 0.2).solve_rpm(1.0)     # a hopeless operating point
+
+
+CROTOR = Path(__file__).resolve().parents[1] / "data" / "crotor"
+
+
+def crotor_sample():
+    front, rear = Rotor(), Rotor()
+    front.load(CROTOR / "cr1.xr")
+    rear.load(CROTOR / "cr2.xr")
+    return front, rear, 3000.0
+
+
+def rotol_pair():
+    return rotol(), rotol(), RPM
+
+
+@pytest.mark.parametrize("make", [crotor_sample, rotol_pair])
+def test_zero_spacing_is_crotors_weights(make):
+    """As the spacing goes to zero, the field model becomes XROTOR's VPUT/VGET coupling with
+    CROTOR's default weights: just ahead of the rear disk the front sees half the rear's
+    far-wake axial velocity (a semi-infinite vortex cylinder's disk value) and no swirl;
+    just behind the front disk the rear sees half the front's far-wake axial velocity and
+    all of its swirl (Stokes). The error is first order in the spacing: about 1e-4 per
+    1e-4 R on the CROTOR sample (CR1/CR2) and the Rotol pair, so 1e-5 R is within 1e-5,
+    and ten times the spacing gives ten times the error."""
+    f, a, rpm = make()
+    w = RotorPair(f, a, 0.0, interaction="weights", thrust_tol=1e-12, max_solves=400).solve_rpm(rpm)
+    assert w.converged
+    errs = {}
+    for eps in (1e-4, 1e-5):
+        f, a, rpm = make()
+        x = RotorPair(f, a, eps * f.s.rad, tol=1e-12, max_iter=300).solve_rpm(rpm)
+        assert x.converged
+        errs[eps] = np.array([rel(x.front[k], w.front[k]) for k in ("thrust", "power", "torque")]
+                             + [rel(x.rear[k], w.rear[k]) for k in ("thrust", "power", "torque")])
+    assert np.all(errs[1e-5] < 1e-5), errs[1e-5]
+    ratio = errs[1e-4] / errs[1e-5]
+    assert np.all((9.0 < ratio) & (ratio < 11.0)), ratio
+    # the front gains load from the rear's upstream field as the spacing opens
+    assert x.front["thrust"] > w.front["thrust"] and x.rear["thrust"] < w.rear["thrust"]
+
+
+def test_weights_mode_rejects_bad_input():
+    f, a, _ = rotol_pair()
+    with pytest.raises(ValueError):
+        RotorPair(f, a, 0.0, interaction="vput")
+    with pytest.raises(ValueError):
+        RotorPair(f, a, 0.0, interaction="weights", weights=(0.5, 0.0, 0.5))
