@@ -78,26 +78,26 @@ Tests that run whole solves use `conftest.EXPENSIVE` (1/8 of the profile's examp
    source routine in each docstring. Code with no effect on state (unused locals, prints,
    plotting) may be omitted; say so in the docstring.
 
-## Compiled hot loops (optional)
+## The compiled core
 
 `src/pyxrotor/_speedups.pyx` (Cython, built by `setup.py` with `-ffp-contract=off`, no
-fast-math) has compiled versions of the OPER solver loop: APITER, APINIT, TPQ, SETXW,
-VCALC, HELICO, and (inside them) CSCALC, UVADD, SEVAL, GETCLCDCM, GETALF, CLCDCM; also
-GAUSS. GRADMO, VRTXCO, FILTER and the design routines (DESI) stay Python; the compiled
-APITER/APINIT call them, and the dispatching TPQ/SETXW/HELICO, back through Python.
-`pyxrotor._accel` picks them when built; `PYXROTOR_PURE=1` (at install: don't build; at
-run time: don't use) or `_accel.pure()` runs the pure Python, which stays the reference.
-* The two must be bit-identical: same operations in the same order, IEEE division
-  (`cdivision=True` = `fmath.div`), fmath's MIN/MAX and NaN conventions (sqrt/log of a
-  negative give +NaN). `tests/differential/test_speedups.py` compares them directly,
-  non-finite inputs included; CI runs the whole suite both ways.
-* Change a routine in both places, or move only the Python and drop the compiled
-  dispatch. Rebuild after editing the .pyx: `python setup.py build_ext --inplace`.
-* The State's scalars must become C doubles before any arithmetic: Cython does Python
-  float arithmetic on object attributes (`s.pwak`), which raises ZeroDivisionError where C
-  gives inf (found by test_oper_sessions). Arrays go through `load_ctx`/`state_ok`: a State
-  whose arrays aren't C-contiguous float64 (stall bool, iaero int64) runs the Python.
-* `pure` vs `compiled` on the Rotol OPER RPM solve: 44 ms vs 5.5 ms (the Fortran: 1.8 ms).
+fast-math; a C compiler is required) is the only implementation of the OPER solver loop:
+APITER, APINIT, TPQ, SETXW, VCALC, HELICO, with CSCALC, UVADD, SEVAL, GETCLCDCM, GETALF and
+CLCDCM as C helpers, and GAUSS. The Python functions of those names (oper.py, wake.py,
+induced.py, aero.clcdcm, numerics.gauss) are thin wrappers. GRADMO, VRTXCO, FILTER, DESI,
+the I/O and the new models are Python; the compiled APITER/APINIT call back into them.
+* Edit those routines in the .pyx and rebuild: `python setup.py build_ext --inplace` (an
+  editable install picks up the in-place build). The differential tests are the check.
+* The porting rules apply unchanged in C: Fortran operation order, IEEE division
+  (`cdivision=True` = `fmath.div`), fmath's MIN/MAX NaN conventions per call site, and
+  sqrt/log of a negative giving +NaN as in fmath.
+* Convert State scalars to C doubles before any arithmetic: Cython does Python float
+  arithmetic on object attributes (`s.pwak`), which raises ZeroDivisionError where C gives
+  inf. Arrays go through `load_ctx`, which requires the layouts State() creates
+  (C-contiguous float64; stall bool; iaero int64) and raises TypeError otherwise.
+* Until 092d52e there were also pure-Python versions, compared bit for bit with the
+  compiled ones (that comparison found the `fmath.pow` pole bug); see git history.
+* Rotol OPER RPM solve: 5.5 ms (the pure Python was 44 ms; the Fortran takes 1.8 ms).
 
 ## Reference harness facts
 

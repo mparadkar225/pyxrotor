@@ -1,16 +1,19 @@
 # cython: language_level=3, boundscheck=False, wraparound=False, cdivision=True
 # cython: initializedcheck=False, nonecheck=False
-"""Compiled versions of pyxrotor's hot loops (optional; see pyxrotor._accel).
+"""The compiled core of pyxrotor: the OPER solver loop (APITER, APINIT, TPQ, SETXW, VCALC,
+HELICO, with CSCALC, UVADD, SEVAL, GETCLCDCM, GETALF and CLCDCM as C helpers) and GAUSS.
 
-Each function performs exactly the operations of its pure-Python counterpart, in the same
-order, so results are bit-identical (and so equal to XROTOR 7.55's). This needs the C
-compiler to keep IEEE semantics: setup.py builds this file with -ffp-contract=off (no fused
-multiply-add) and without -ffast-math. cdivision=True gives IEEE division (x/0 -> inf, 0/0
--> nan), which is what pyxrotor.fmath.div returns. NaNs produced by sqrt/log of a negative
-number are returned as the positive quiet NaN, like pyxrotor.fmath.
+Ported from XROTOR 7.55 with the Fortran's operations in the Fortran's order, so results
+are bit-identical to it; the differential tests check this routine by routine against the
+compiled Fortran. That needs IEEE arithmetic from the C compiler: setup.py builds this file
+with -ffp-contract=off (no fused multiply-add) and without -ffast-math. cdivision=True gives
+IEEE division (x/0 -> inf, 0/0 -> nan), as pyxrotor.fmath.div does in the Python modules;
+MIN/MAX follow fmath's per-call-site NaN conventions. Before arithmetic, State scalars are
+converted to C doubles: Cython does Python float arithmetic on object attributes, which
+raises where the Fortran gives inf.
 
-The pure-Python versions stay the reference implementation; tests check the two against
-each other (tests/differential/test_speedups.py) as well as against the Fortran.
+(Until commit 092d52e the Python modules also had pure-Python versions of these routines;
+the two were compared bit for bit, including on non-finite inputs.)
 """
 from libc.math cimport sqrt as c_sqrt, exp as c_exp, log as c_log, pow as c_pow, fabs, NAN, INFINITY
 from cython.view cimport array as cvarray
@@ -42,7 +45,7 @@ cdef inline double f_fmin(double a, double b) noexcept nogil:
 
 
 # ------------------------------------------------------------------ CLCDCM
-# aero.py's compressibility drag model constants
+# CLCDCM's compressibility drag model constants ("HHY 10/23/00")
 cdef double CDMFACTOR = 10.0
 cdef double CLMFACTOR = 0.25
 cdef double MEXP = 3.0
@@ -419,7 +422,7 @@ _FLOAT_ARRAYS = ("xi", "dxi", "ubody", "beta", "beta0", "ch", "gam", "cl", "cd",
 
 def state_ok(s):
     """True if the State's arrays have the layouts the compiled routines need (as State()
-    creates them); otherwise the callers use the pure-Python routines."""
+    creates them)."""
     for name in _FLOAT_ARRAYS:
         a = getattr(s, name)
         if a.dtype != np.float64 or not a.flags.c_contiguous:

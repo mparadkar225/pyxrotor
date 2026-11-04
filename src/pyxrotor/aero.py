@@ -11,27 +11,22 @@ Every expression keeps the Fortran's operation order, so results match XROTOR 7.
 bit; see CLAUDE.md before "simplifying" anything. Operations that can meet a zero divisor,
 overflow, or NaN use pyxrotor.fmath, which returns the IEEE inf/NaN the Fortran produces.
 
+CLCDCM is compiled (_speedups.pyx); GETCLCDCM and GETALF here are the versions that take
+a list of sections (DESI, tests). The solver uses their C counterparts in _speedups.pyx.
+
 Indexing: stations and sections are 0-based here. An IAERO value N in Fortran is N-1 in
 `iaero`; Fortran's "unset" value 0 (from INIT) is -1.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, fields
 from typing import NamedTuple, Sequence
 
 import numpy as np
 
-from . import _accel
-from . import fmath as fm
-from .fmath import div as _div, pow as _pow   # names used throughout this module
+from . import _speedups
+from .fmath import div as _div
 
-# Compressibility drag model constants (CLCDCM, "HHY 10/23/00")
-CDMFACTOR = 10.0
-CLMFACTOR = 0.25
-MEXP = 3.0
-CDMDD = 0.0020
-CDMSTALL = 0.1000
 
 # GETALF Newton iteration (DATA statements)
 GETALF_NITER = 10
@@ -107,108 +102,8 @@ def clcdcm(alf: float, w: float, rey: float, vel: float, vso: float, sec: AeroSe
     vel  flight speed (COMMON VEL)   vso  speed of sound (COMMON VSO)
     rey <= 0 disables Reynolds-number scaling of CD.
     """
-    alf, w, rey, vel, vso = float(alf), float(w), float(rey), float(vel), float(vso)
-    if _accel.enabled:
-        return SectionAero(*_accel.ext.clcdcm(alf, w, rey, vel, vso, sec))
-    a0, clmax, clmin = sec.a0, sec.clmax, sec.clmin
-    dclda, dclda_stall, dcl_stall = sec.dclda, sec.dclda_stall, sec.dcl_stall
-    cdmin, cldmin, dcdcl2, cmcon = sec.cdmin, sec.cldmin, sec.dcdcl2, sec.cmcon
-    mcrit, reref, rexp = sec.mcrit, sec.reref, sec.rexp
-
-    # ---- Prandtl-Glauert compressibility factor
-    msq = w * w * (vel * vel) / (vso * vso)
-    msq_w = 2.0 * w * (vel * vel) / (vso * vso)
-    mach_limited = False
-    if msq >= 1.0:
-        mach_limited = True                      # 'CLFUNC: Local Mach number limited to 0.99'
-        msq = 0.99
-        msq_w = 0.0
-    pg = 1.0 / fm.sqrt(1.0 - msq)
-    pg_w = 0.5 * msq_w * (pg * pg * pg)
-
-    # ---- Mach number and dependence on velocity
-    mach = fm.sqrt(msq)
-    mach_w = 0.0
-    if mach != 0.0:
-        mach_w = 0.5 * msq_w / mach
-
-    # --- CL from dCL/dAlpha and Prandtl-Glauert scaling
-    cla = dclda * pg * (alf - a0)
-    cla_alf = dclda * pg
-    cla_w = dclda * pg_w * (alf - a0)
-
-    # --- Effective CLmax is limited by Mach effects
-    dmstall = _pow(CDMSTALL / CDMFACTOR, 1.0 / MEXP)
-    clmaxm = fm.fmax(0.0, (mcrit + dmstall - mach) / CLMFACTOR) + cldmin
-    clmax = fm.fmin(clmax, clmaxm)
-    clminm = fm.fmin(0.0, -(mcrit + dmstall - mach) / CLMFACTOR) + cldmin
-    clmin = fm.fmax(clmin, clminm)
-
-    # --- CL limiter function (turns on after +-stall)
-    ecmax = fm.exp(fm.fmin(200.0, _div(cla - clmax, dcl_stall)))
-    ecmin = fm.exp(fm.fmin(200.0, _div(clmin - cla, dcl_stall)))
-    cllim = dcl_stall * fm.log((1.0 + ecmax) / (1.0 + ecmin))
-    cllim_cla = ecmax / (1.0 + ecmax) + ecmin / (1.0 + ecmin)
-
-    # --- Subtract a (nearly unity) fraction of the limited CL function
-    fstall = _div(dclda_stall, dclda)
-    clift = cla - (1.0 - fstall) * cllim
-    cl_alf = cla_alf - (1.0 - fstall) * cllim_cla * cla_alf
-    cl_w = cla_w - (1.0 - fstall) * cllim_cla * cla_w
-
-    stallf = clift > clmax or clift < clmin
-
-    # --- CM from CMCON and Prandtl-Glauert scaling
-    cmom = pg * cmcon
-    cm_al = 0.0
-    cm_w = pg_w * cmcon
-
-    # ---- Reynolds number scaling factor
-    if rey <= 0:
-        rcorr = 1.0
-        rcorr_rey = 0.0
-    else:
-        rcorr = _pow(rey / reref, rexp)
-        rcorr_rey = rexp / rey
-
-    # --- Linear-range drag: CD0 + quadratic in (CL - CLDMIN)
-    dcl = clift - cldmin
-    cdrag = (cdmin + dcdcl2 * (dcl * dcl)) * rcorr
-    cd_alf = (2.0 * dcdcl2 * dcl * cl_alf) * rcorr
-    cd_w = (2.0 * dcdcl2 * dcl * cl_w) * rcorr
-    cd_rey = cdrag * rcorr_rey
-
-    # --- Post-stall drag
-    fstall = _div(dclda_stall, dclda)
-    dcdx = _div((1.0 - fstall) * cllim, pg * dclda)
-    dcd = 2.0 * (dcdx * dcdx)
-    dcd_alf = _div(4.0 * dcdx * (1.0 - fstall) * cllim_cla * cla_alf, pg * dclda)
-    dcd_w = 4.0 * dcdx * (_div((1.0 - fstall) * cllim_cla * cla_w, pg * dclda) - dcd / pg * pg_w)
-
-    # --- Compressibility drag above an effective Mcrit that falls with |CL - CLDMIN|
-    dmdd = _pow(CDMDD / CDMFACTOR, 1.0 / MEXP)
-    critmach = mcrit - CLMFACTOR * abs(clift - cldmin) - dmdd
-    critmach_alf = -CLMFACTOR * abs(cl_alf)
-    critmach_w = -CLMFACTOR * abs(cl_w)
-    if mach < critmach:
-        cdc = 0.0
-        cdc_alf = 0.0
-        cdc_w = 0.0
-    else:
-        cdc = CDMFACTOR * _pow(mach - critmach, MEXP)
-        cdc_w = _div(MEXP * mach_w * cdc, mach) - _div(MEXP * critmach_w * cdc, critmach)
-        cdc_alf = -_div(MEXP * critmach_alf * cdc, critmach)
-
-    # --- Total drag (FAC is XROTOR's hook for Mach-scaled profile drag; kept at 1)
-    fac = 1.0
-    fac_w = 0.0
-    cdrag = fac * cdrag + dcd + cdc
-    cd_alf = fac * cd_alf + dcd_alf + cdc_alf
-    cd_w = fac * cd_w + fac_w * cdrag + dcd_w + cdc_w
-    cd_rey = fac * cd_rey
-
-    return SectionAero(clift, cl_alf, cl_w, stallf, cdrag, cd_alf, cd_w, cd_rey,
-                       cmom, cm_al, cm_w, clmax, clmin, mach_limited)
+    return SectionAero(*_speedups.clcdcm(float(alf), float(w), float(rey), float(vel),
+                                         float(vso), sec))
 
 
 def setiaero(xi: Sequence[float], sections: Sequence[AeroSection]) -> np.ndarray:

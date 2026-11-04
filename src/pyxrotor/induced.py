@@ -13,6 +13,8 @@ into the State, exactly as XROTOR does from APINIT/APITER/DESI.
 Note: GRADMO, HELICO and VRTXCO do not include XROTOR.INC and compute their own
 PI = 4*ATAN(1), the exact value, unlike the rest of XROTOR (pyxrotor.constants.PI).
 
+VCALC and HELICO are compiled (_speedups.pyx); the functions here call it.
+
 Vectorization: VRTXCO sums ~10^3 segment velocities per station pair. Segment velocities
 are computed with NumPy element-wise (bit-identical to scalar code); the running sums use
 np.add.accumulate, which adds strictly left to right like the Fortran loop (np.sum does not).
@@ -23,7 +25,7 @@ import math
 
 import numpy as np
 
-from . import _accel
+from . import _speedups
 from . import fmath as fm
 from .fmath import div
 from .state import State
@@ -38,14 +40,7 @@ _CROSS = {(0, 1): (1, 2), (0, 2): (-1, 1), (1, 0): (-1, 2), (1, 2): (1, 0),
 
 def vcalc(s: State) -> None:
     """Port of SUBROUTINE VCALC: VIND(k,I) = sum over J of VIND_GAM(k,I,J)*GAM(J)."""
-    if _accel.enabled and _accel.ext.state_ok(s):
-        _accel.ext.vcalc(s)
-        return
-    ii = s.ii
-    vsum = np.zeros((3, ii))
-    for j in range(ii):                       # sequential over J, as in the Fortran
-        vsum = vsum + s.vind_gam[:, :ii, j] * s.gam[j]
-    s.vind[:, :ii] = vsum
+    _speedups.vcalc(s)
 
 
 def _duct_swirl(s: State, blds: float) -> None:
@@ -102,76 +97,6 @@ def _gam_extended(s: State) -> np.ndarray:
     return np.concatenate([s.gam, s.dtii, s.dpii, s.dtvi, s.dpvi, s.dtwi, s.dpwi])
 
 
-def _helico_harmonics(sys_, gam, ii, iimax, nn, duct):
-    """HELICO's loop over harmonics, in NumPy: returns VIND_GAM(3,I,J) and VIND_ADW(3,I)
-    (Fortran indices, before the sawtooth term and scaling). The pure-Python reference for
-    _speedups.helico_harmonics."""
-    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        # ==== harmonics n = 2, 4, ..., NN. The Fortran loops over n; each harmonic's
-        # tridiagonal system is independent of the others, so all are solved at once, axis
-        # 0 being the harmonic (element-wise, so every value is computed exactly as in the
-        # loop). Only the sum over harmonics is order-dependent; it stays sequential below.
-        rn = np.arange(2, nn + 1, 2, dtype=float)       # RN
-        rn2 = rn * rn
-        nh = rn.size
-        diag = np.arange(1, ii + 1)
-
-        # ---- inner BC dAn/dx = 0, interior equations, outer BC
-        ainv = np.zeros((nh, iimax + 1))
-        csav = np.zeros((nh, iimax + 1))
-        ainv[:, 0] = 1.0
-        csav[:, 0] = -1.0
-        for i in range(1, iimax):
-            b = sys_[0, i]
-            a = -(sys_[0, i] + sys_[1, i] * rn2 + sys_[2, i])
-            c = sys_[2, i]
-            ainv[:, i] = 1.0 / (a - b * csav[:, i - 1])  # IEEE division, as fmath.div
-            csav[:, i] = c * ainv[:, i]
-        b = sys_[0, iimax]
-        ainv[:, iimax] = 1.0 / (1.0 - b * csav[:, iimax - 1])
-
-        # ==== An and dAn(i)/dGam(j): right-hand sides
-        an_gam = np.zeros((nh, iimax + 1, ii + 1))
-        an_gam[:, 1:ii + 1, 0] = (sys_[1, 1:ii + 1] * rn2[:, None]) * gam[:ii]
-        an_gam[:, diag, diag] = sys_[1, 1:ii + 1] * rn2[:, None]
-
-        # ---- forward elimination, only up to the nonzero elements
-        for i in range(1, iimax + 1):
-            jl = min(i, ii) + 1
-            an_gam[:, i, :jl] = (an_gam[:, i, :jl] - sys_[0, i] * an_gam[:, i - 1, :jl]) \
-                * ainv[:, i, None]
-        for i in range(iimax - 1, -1, -1):
-            an_gam[:, i, :] = an_gam[:, i, :] - csav[:, i, None] * an_gam[:, i + 1, :]
-
-        # ==== dAn(i)/dAdw
-        an_adw = np.zeros((nh, iimax + 1))
-        an_adw[:, 1:iimax] = (sys_[3, 1:iimax] * rn2[:, None]) \
-            * (gam[:iimax - 1] + an_gam[:, 1:iimax, 0])
-        for i in range(1, iimax + 1):
-            an_adw[:, i] = (an_adw[:, i] - sys_[0, i] * an_adw[:, i - 1]) * ainv[:, i]
-        for i in range(iimax - 1, -1, -1):
-            an_adw[:, i] = an_adw[:, i] - csav[:, i] * an_adw[:, i + 1]
-
-        # ---- sum potential harmonics into the swirl-circulation coefficients, in order
-        vg3 = np.zeros((ii + 1, ii + 1))       # VIND_GAM(3,I,J) with Fortran I, J
-        va3 = np.zeros(ii + 1)                 # VIND_ADW(3,I)
-        for h in range(nh):
-            vg3[1:, 1:] = vg3[1:, 1:] + an_gam[h, 1:ii + 1, 1:ii + 1]
-            vg3[diag, diag] = vg3[diag, diag] + 1.0
-            va3[1:] = va3[1:] + an_adw[h, 1:ii + 1]
-
-        # ---- extrapolate the series assuming (An + Gam) ~ 1/n^2 (from the last harmonic)
-        if not duct:
-            fsum = 0.0
-            for n in range(nn + 2, 4 * nn + 1, 2):
-                t = float(nn) / float(n)
-                fsum = fsum + t * t
-            vg3[1:, 1:] = vg3[1:, 1:] + an_gam[-1, 1:ii + 1, 1:ii + 1] * fsum
-            vg3[diag, diag] = vg3[diag, diag] + 1.0 * fsum
-            va3[1:] = va3[1:] + an_adw[-1, 1:ii + 1] * fsum
-    return vg3, va3
-
-
 def helico(s: State) -> None:
     """Port of SUBROUTINE HELICO: swirl-circulation influence coefficients by the potential
     (Goldstein) formulation. Each of 64 Fourier harmonics of the perturbation potential is
@@ -180,83 +105,7 @@ def helico(s: State) -> None:
     Written with Fortran indices: x[I] is X(I) (declared X(0:IDIM)), an_gam[I, J] is
     AN_GAM(I,J), sys_[k, I] is SYS(k+1, I); station I is s.xi[I-1].
     """
-    if _accel.enabled and _accel.ext.state_ok(s):
-        _accel.ext.helico(s, _gam_extended(s))      # the same operations, compiled
-        return
-    idim = 150
-    ii, nblds, adw = s.ii, s.nblds, s.adw
-    gam = _gam_extended(s)                     # GAM(I) is gam[I-1]
-    nn = 128
-
-    x = np.zeros(idim + 1)
-    x[1:ii + 1] = s.xi[:ii]
-    xi0 = float(s.xv[0])
-    xitip = float(s.xv[ii])
-    x[0] = 2.0 * xi0 - float(s.xi[0])
-    x[ii + 1] = 2.0 * xitip - float(s.xi[ii - 1])
-
-    if s.duct:
-        iimax = ii + 1
-    else:
-        # ---- position of outermost point (at "infinity")
-        xinf = 4.0 * xitip
-        x[ii + 2] = 2.0 * xitip - float(s.xi[ii - 2])
-        x[ii + 3] = 2.0 * xitip - float(s.xi[ii - 3])
-        x[ii + 4] = 2.0 * xitip - float(s.xi[ii - 4])
-        xfac = div(x[ii + 4] - x[ii + 3], x[ii + 3] - x[ii + 2])
-        dx = (x[ii + 4] - x[ii + 3]) * xfac
-        for i in range(ii + 5, idim):
-            x[i] = x[i - 1] + dx
-            if x[i] >= xinf:
-                break
-            dx = dx * xfac
-        else:
-            i = idim                           # 'HELICO: Local array too small.'
-        iimax = i
-
-    s.vind_gam[:, :ii, :ii] = 0.0
-    s.vind_adw[:, :ii] = 0.0
-
-    # ==== tridiagonal system
-    adwinv = div(1.0, adw * adw)
-    qbsq = 0.25 * float(nblds * nblds)
-    sys_ = np.zeros((4, idim + 1))
-    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        for i in range(1, iimax):
-            xm, x0, xp = float(x[i - 1]), float(x[i]), float(x[i + 1])
-            sys_[0, i] = div(x0 + xm, x0 - xm)
-            sys_[2, i] = div(xp + x0, xp - x0)
-            sys_[1, i] = qbsq * (div(1.0, x0) + x0 * adwinv) * (xp - xm)
-            sys_[3, i] = qbsq * div(-2.0 * x0 * adwinv, adw) * (xp - xm)
-        sys_[0, iimax] = -1.0 if s.duct else 1.0
-
-        if _accel.enabled:
-            vg3 = np.zeros((ii + 1, ii + 1))   # VIND_GAM(3,I,J) with Fortran I, J
-            va3 = np.zeros(ii + 1)             # VIND_ADW(3,I)
-            _accel.ext.helico_harmonics(sys_, gam, ii, iimax, nn, s.duct, vg3, va3)
-        else:
-            vg3, va3 = _helico_harmonics(sys_, gam, ii, iimax, nn, s.duct)
-
-        # ---- sawtooth self-influence term and scaling
-        for i in range(1, ii + 1):
-            bfac = div(float(nblds), 2.0 * PI_EXACT * float(x[i]))
-            vg3[i, i] = vg3[i, i] + 0.5
-            vg3[i, 1:] = vg3[i, 1:] * bfac
-            va3[i] = va3[i] * bfac
-
-        s.vind_gam[2, :ii, :ii] = vg3[1:, 1:]
-        s.vind_adw[2, :ii] = va3[1:]
-
-        # ---- other velocity components VX, VY from VZ
-        for i in range(ii):
-            xi = float(s.xi[i])
-            s.vind_gam[0, i, :ii] = s.vind_gam[2, i, :ii] * xi / adw
-            s.vind_gam[1, i, :ii] = 0.0
-            vsum = 0.0
-            for j in range(ii):
-                vsum = vsum + float(s.gam[j]) * float(s.vind_gam[2, i, j])
-            s.vind_adw[0, i] = div(float(s.vind_adw[2, i]) * xi, adw) - div(vsum * xi, adw * adw)
-            s.vind_adw[1, i] = 0.0
+    _speedups.helico(s, _gam_extended(s))
 
 
 def vorsegvel(a: np.ndarray, b: np.ndarray, full: bool = True):

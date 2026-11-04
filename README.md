@@ -102,9 +102,8 @@ pip install -e ".[test]"
 pytest
 ```
 
-`pip install` also compiles the operating-point solver loop with Cython, which makes a
-solve about 8x faster (5.5 ms against the Fortran's 1.8 ms for the Rotol propeller). They give bit-identical results to the pure-Python code, which is
-used instead if there is no C compiler, or with `PYXROTOR_PURE=1`.
+`pip install` compiles the operating-point solver loop with Cython, so it needs a C
+compiler. A solve takes about 5.5 ms (the Fortran: 1.8 ms) for the Rotol propeller.
 
 ## How it is checked
 

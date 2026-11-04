@@ -7,14 +7,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        # compiled hot loops (pyxrotor._speedups) and the pure-Python fallback
-        impl: [compiled, pure]
-    name: test (${{ matrix.impl }})
-    env:
-      PYXROTOR_PURE: ${{ matrix.impl == 'pure' && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,11 +24,6 @@ jobs:
 
       - name: Install pyxrotor
         run: pip install -e ".[test]"
-
-      - name: Check which implementation runs
-        run: |
-          python -c "from pyxrotor import _accel; print('compiled built:', _accel.available, 'in use:', _accel.enabled)"
-          python -c "from pyxrotor import _accel; import os; assert _accel.enabled == (os.environ.get('PYXROTOR_PURE') != '1')"
 
       - name: Test
         # Runs in parallel (pyproject's addopts: -n auto). A Fortran STOP inside a reference

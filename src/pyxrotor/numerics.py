@@ -9,6 +9,8 @@ Ported routines:
     SEVLIN  sevlin()   piecewise-linear evaluation and slope
     FILTER  filter_()  implicit smoothing of an array (in place)
 
+GAUSS is compiled (_speedups.pyx); gauss() calls it.
+
 Element-wise row operations are vectorized with NumPy; this is bit-identical because each
 element gets the same single multiply and subtract as in the Fortran. Reductions (sums along
 a row) stay as sequential loops to keep the Fortran's summation order.
@@ -17,7 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from . import _accel
+from . import _speedups
 from .fmath import div
 
 
@@ -29,54 +31,7 @@ def gauss(z: np.ndarray, r: np.ndarray, nn: int) -> None:
     """
     if r.ndim == 1:
         r = r[:, None]                                 # a view: updates the caller's array
-    if (_accel.enabled and z.dtype == np.float64 and r.dtype == np.float64
-            and z.flags.c_contiguous and r.flags.c_contiguous):
-        _accel.ext.gauss(z, r, nn)                      # the same operations, compiled
-        return
-    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        for np_ in range(nn - 1):                       # NP = np_+1
-            np1 = np_ + 1
-            # ---- find max pivot index NX (arithmetic IF: only '>' moves it; NaN -> moves)
-            col = [abs(v) for v in z[np_:nn, np_].tolist()]    # Python floats: same values
-            nx = 0
-            for n in range(1, nn - np_):
-                d = col[n] - col[nx]
-                if not (d < 0.0 or d == 0.0):
-                    nx = n
-            nx += np_
-            pivot = div(1.0, float(z[nx, np_]))
-            # ---- switch pivots
-            z[nx, np_] = z[np_, np_]
-            # ---- switch rows & normalize pivot row
-            temp = z[nx, np1:nn] * pivot
-            z[nx, np1:nn] = z[np_, np1:nn]
-            z[np_, np1:nn] = temp
-            temp = r[nx, :] * pivot
-            r[nx, :] = r[np_, :]
-            r[np_, :] = temp
-            # ---- forward eliminate everything: the Fortran's loop over rows K, all rows
-            # at once (each element is still Z(K,L) - ZTMP*Z(NP,L), computed once)
-            ztmp = z[np1:nn, np_, None]
-            z[np1:nn, np1:nn] = z[np1:nn, np1:nn] - ztmp * z[np_, np1:nn]
-            r[np1:nn, :] = r[np1:nn, :] - ztmp * r[np_, :]
-        # ---- solve for last row
-        r[nn - 1, :] = r[nn - 1, :] / z[nn - 1, nn - 1]
-        # ---- back substitute everything (sequential sum over K)
-        if r.shape[1] == 1:
-            # one right-hand side: on Python floats (the same IEEE double operations, no
-            # fused multiply-add; only - and * occur, which never raise)
-            rr = r[:nn, 0].tolist()
-            for np_ in range(nn - 2, -1, -1):
-                zrow = z[np_, :nn].tolist()
-                v = rr[np_]
-                for k in range(np_ + 1, nn):
-                    v = v - zrow[k] * rr[k]
-                rr[np_] = v
-            r[:nn, 0] = rr
-        else:
-            for np_ in range(nn - 2, -1, -1):
-                for k in range(np_ + 1, nn):
-                    r[np_, :] = r[np_, :] - z[np_, k] * r[k, :]
+    _speedups.gauss(z, r, nn)
 
 
 def trisol(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray, kk: int) -> None:
