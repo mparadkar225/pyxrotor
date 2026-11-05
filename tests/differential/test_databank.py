@@ -91,3 +91,26 @@ def test_x8_fix_matters(lib):
     b = databank.cdl(0.1, 0.07, 0.12, fix_x8=True)
     assert a != b
     assert databank.cdl(0.1, 0.03, 0.12) == databank.cdl(0.1, 0.03, 0.12, fix_x8=True)
+
+
+@SETTINGS
+@given(alphao=st.one_of(fl(-6.0, 15.0), st.sampled_from([3.0, 5.0, -2.0, 11.0])),
+       t=st.one_of(fl(0.02, 0.4), st.sampled_from([0.09, 0.16, 0.30, 0.35, 0.04])),
+       hm=st.one_of(fl(0.0, 0.95), st.sampled_from([0.0, 0.3, 0.665, 0.68])))
+def test_clcdcy(lib, alphao, t, hm):
+    """The Clark Y bank's CLCD: thin and thick lift (THKSLP above 16%), thin-section drag
+    (BOF*COF, CDSF above MD) and the CDnnF families, past every table's ends."""
+    out = lib.call("CLCDCY", alphao, t, hm, 0.0, 0.0, 1, 1)
+    got = databank.clcdcy(alphao, t, hm)
+    same(got.cl, out[3], "cl")
+    same(got.cd, out[4], "cd")
+
+
+@SETTINGS
+@given(t=fl(0.02, 0.4), ncld=st.one_of(st.just(0.0), fl(-0.3, 1.2)))
+def test_cltmax(lib, t, ncld):
+    """CLTMAX both ways: CLD from t/c (ncld 0) and t/c from CLD (t overwritten)."""
+    out = lib.call("CLTMAX", t, ncld, 0.0, 0.0)
+    got = databank.cltmax(t, ncld)
+    for name, want in zip(("t", "cld", "alphlo", "dncld"), out):
+        same(getattr(got, name), want, name)

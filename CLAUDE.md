@@ -336,7 +336,11 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   (`fix_x8` gives .1). `fit_section` fits XROTOR's section parameters to a bank (MCRIT where
   CD at CLDMIN has risen 0.002). On the 16-series it puts Mcrit only 0.02-0.08 above the
   plain thickness estimate (the calibrated +0.15/0.20 is a propeller-level correction), its
-  drag due to lift is ~8x `sections.naca16`'s DCDCL2 and its CDMIN 15-50% lower.
+  drag due to lift is ~8x `sections.naca16`'s DCDCL2 and its CDMIN 15-50% lower. The Clark Y
+  bank (R&M 2036 data) agrees with `sections.clark_y` on CDMIN and DCDCL2 and also puts Mcrit
+  within -0.02/+0.08 of the plain estimate (minimum drag at CL 0.19, not 0.35). Fit inside
+  ALPHAO -2 to 11 deg: the Clark Y drag dips where its tables extrapolate. Clark Y ignores Re.
+  OUT's interval search loops forever on NaN (Fortran too), so test with finite inputs.
 * `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).
   Subtraction underflows within ~1e-8 of r = a and gave NaN.
 

@@ -124,3 +124,41 @@ def test_bank_vs_thickness_estimate():
         assert f.mcrit < sections.mcrit(t) - 0.08
         assert 6 < f.dcdcl2 / e.dcdcl2 < 10
         assert 0.5 < f.cdmin / e.cdmin < 0.9
+
+
+def test_clark_y_sample(tmp_path):
+    """Clark Y, both sample cases (t/c 0.117 at Mach 0-0.4, alpha -1 to 5 deg; t/c 0.30 at
+    Mach 0.6 and 0.85, alpha -2 to 10 deg; 10000 ft, chord 0.75 ft): CL and CD within 2e-6
+    (the 1986 values sit at or just below the double-precision ones, CL 1.110322 printed
+    1.110320). Covers CLTMAX, the thin-section lift and drag, CD11F/CD12F (ALPHAO > 5 at
+    11.7%), THKSLP and CD30F/CD35F. The printed Reynolds numbers follow from ATMCON."""
+    tol = 2.5e-6
+    want = sample("clarky")                  # case, mach, re, alpha, CL, CD
+    got = run_fortran(tmp_path, "clarky", ["clarky.f", "atmcon.f"])
+    assert np.abs(got[:, 4:6] - want[:, 4:6]).max() < tol
+    # 6 printed digits; the 1986 Reynolds numbers are 1-3 units of the 6th higher
+    assert np.all(np.abs(got[:, 2] - want[:, 2]) <= 5e-6 * want[:, 2])
+    for case, m, re, a, cl, cd in want:
+        c = databank.clark_y(a, m, 0.117 if case == 1 else 0.30)
+        assert abs(c.cl - cl) < tol and abs(c.cd - cd) < tol, (case, m, a)
+    d = databank.cltmax(0.117)
+    assert abs(d.cld - 0.505381) < 1e-6 and abs(d.alphlo + 5.186451) < 2e-6
+    d = databank.cltmax(0.30)
+    assert abs(d.cld - 1.016961) < 1e-6 and abs(d.alphlo + 12.712020) < 2e-6
+
+
+def test_clark_y_bank_vs_estimate():
+    """The Clark Y bank (R&M 2036 data) against pyxrotor.sections.clark_y, a record: at 6-12%
+    thickness its minimum drag is within 0.0011 of the estimate (or below it), DCDCL2 within
+    0.002 of 0.007, and its drag-rise Mach number at CLDMIN between the plain thickness
+    estimate - 0.02 and + 0.08: like the 16-series bank, nowhere near the calibrated +0.15.
+    Its minimum drag sits at CL 0.19, not the estimate's 0.35."""
+    from pyxrotor import sections
+    for t in (0.06, 0.09, 0.12):
+        f = databank.fit_section(databank.bank_clark_y(t), clmax=1.3, clmin=-0.5)
+        e = sections.clark_y(t, 0.7, mcrit_shift=0.0)
+        assert f.cdmin - e.cdmin < 0.0011
+        assert abs(f.dcdcl2 - 0.007) < 0.002
+        assert -0.02 < f.mcrit - e.mcrit < 0.08
+        assert f.mcrit < sections.mcrit(t) - 0.07
+        assert abs(f.cldmin - 0.19) < 0.01
