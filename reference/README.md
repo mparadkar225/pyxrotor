@@ -7,6 +7,7 @@ submodules pinned to exact commits; `build.sh` compiles them into `reference/bui
 |---|---|---|
 | XROTOR 7.55 | `xrotor-7.55/` (MIT source, mirrored at mparadkar225/xrotor) | **The oracle.** Every ported routine is tested against it. |
 | xrotor-python | `xrotor-python/` (DARcorporation, 2019, GPL v3) | Structural reference only (see below). |
+| CR-176883 data banks | `cr176883/` (transcribed from NASA CR-176883, 1986) | Oracle for `pyxrotor.databank`. |
 
 ## XROTOR 7.55 (`libxrotor755.so`, `ref755.py`)
 
@@ -41,6 +42,18 @@ optimization level, with or without the patch), and its section model is not 7.5
 nothing is validated against it. It is kept for its design: all COMMON state moved into
 one explicit context object, and a small library API (`set_case`, `operate`, ...), which
 is a useful pattern for pyxrotor's own structure.
+
+## CR-176883 airfoil data banks (`libcr176883.so`, `crdb.py`)
+
+The Clark Y, NACA 4-digit and NACA 16-series data banks of NASA CR-176883, transcribed
+from the report's listings (see `cr176883/README.md`). Built with the same settings as
+XROTOR, so `pyxrotor.databank` is compared with them bit for bit:
+
+```python
+from reference.crdb import CRDB
+out = CRDB().call("CLCD16", 0.5, 4.0, 0.0, 0.0, 1, 1, 1.0, 0.06, 0.0, 0.3, 0.75,
+                  wa, vis, den, 0.0, 0.0, 0.0, 0.0)    # arguments come back, as in ref.call
+```
 
 ## Build settings
 

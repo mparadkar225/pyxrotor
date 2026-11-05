@@ -3,6 +3,7 @@
 #
 #   reference/build/libxrotor755.so   XROTOR 7.55 (MIT source) + non-interactive shim
 #   reference/build/xrotor-python/    DARcorporation xrotor-python, patched to double-precision I/O
+#   reference/build/libcr176883.so    NASA CR-176883 airfoil data banks (transcribed, reference/cr176883)
 #
 # Requirements: gfortran, gcc, cmake, libX11 headers (the plot library is linked but never opened).
 set -euo pipefail
@@ -58,6 +59,16 @@ cmake -S "$OUT/xrotor-python" -B "$OUT/xrotor-python/cmake" -DCMAKE_BUILD_TYPE=N
       -DCMAKE_Fortran_FLAGS="$FFLAGS" > "$OUT/xrotor-python/cmake.log"
 cmake --build "$OUT/xrotor-python/cmake" -j 4 > "$OUT/xrotor-python/build.log"
 cp "$OUT"/xrotor-python/cmake/libxrotor.so "$OUT/xrotor-python/xrotor/"
+
+# ---------------------------------------------------------------- CR-176883 data banks
+echo "== CR-176883 data banks"
+mkdir -p "$OUT/cr176883"
+for f in "$HERE"/cr176883/*.f; do
+  case "$(basename "$f")" in sample_*) continue;; esac
+  gfortran $F77FLAGS -c "$f" -o "$OUT/cr176883/$(basename "${f%.f}").o"
+done
+gfortran -shared -o "$OUT/libcr176883.so.tmp" "$OUT"/cr176883/*.o
+mv -f "$OUT/libcr176883.so.tmp" "$OUT/libcr176883.so"
 
 # ---------------------------------------------------------------- build record
 python3 - "$OUT" "$SRC755" "$SRCXP" "$FFLAGS" <<'EOF'

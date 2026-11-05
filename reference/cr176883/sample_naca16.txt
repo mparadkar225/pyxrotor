@@ -1,0 +1,10 @@
+# CR-176883 16-series sample case (report p. 165, PDF p. 172): t/c 0.04, CLD 0.228150,
+# ALPHALO -2 deg (this output's program took ALPHALO as input; CLD is derived from it),
+# altitude 0, chord 1 ft, X = 0.5. REYNOLDS NO. 0.327645E 01 and 0.509669E 01 (millions).
+# mach alpha CL CD
+0.45 0.0 0.241398 0.005540
+0.45 2.0 0.482795 0.008086
+0.45 4.0 0.724193 0.020606
+0.70 0.0 0.312860 0.005867
+0.70 2.0 0.625720 0.011710
+0.70 4.0 0.938580 0.044125

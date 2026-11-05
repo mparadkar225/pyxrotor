@@ -327,6 +327,16 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   0.7 points to tip Mach 0.72, but is too large above (oval drawn as a cylinder). TR-852's
   16-040 fairing wants Mcrit = 0.85 - 1.2 t + 0.15 *without* the 0.5 floor. The floor stays
   because removing it costs 0.06-0.11 on the P-47s (cuffed roots not modeled).
+* `databank`: NASA CR-176883's Clark Y, NACA 4-digit and 16-series data banks, a port (bit
+  for bit, `tests/differential/test_databank.py`) of the report's Fortran, transcribed by eye
+  in `reference/cr176883/` (the oracle, `libcr176883.so`, `reference/crdb.py`; built REAL*8
+  like XROTOR). The REAL*4 transcription reproduces the report's sample output to its last
+  digit (`tests/model/test_databank_sample.py`), which checks the transcription. Integer powers
+  follow gfortran -O1's chains (`databank._powi`). The 4-digit X8(13) reads 1. as compiled
+  (`fix_x8` gives .1). `fit_section` fits XROTOR's section parameters to a bank (MCRIT where
+  CD at CLDMIN has risen 0.002). On the 16-series it puts Mcrit only 0.02-0.08 above the
+  plain thickness estimate (the calibrated +0.15/0.20 is a propeller-level correction), its
+  drag due to lift is ~8x `sections.naca16`'s DCDCL2 and its CDMIN 15-50% lower.
 * `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).
   Subtraction underflows within ~1e-8 of r = a and gave NaN.
 
