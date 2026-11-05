@@ -1,0 +1,1 @@
+{"image": "19930093302/pages/p16-16.png", "overlay": "ov_l177_fig1.png", "out": "trk_l177_fig1.json", "curves": {"bD": {"seed": [1436, 1566], "xlo": 1040, "xhi": 1760}, "hb": {"seed": [1436, 2098], "xlo": 1090, "xhi": 1760, "win": 6}, "twist": {"seed": [1436, 1998], "xlo": 1050, "xhi": 1780, "win": 6}, "hb_out": {"seed": [1633, 2140], "xlo": 1530, "xhi": 1760, "win": 6}}}
