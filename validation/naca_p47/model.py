@@ -9,8 +9,10 @@ checking XROTOR's compressibility model against flight data:
              trailing-edge extensions (NACA RM L7D10, Gardner 1947; P-47D-28)
 
 Each test run (the reports' tables, transcribed in <prop>_table*.csv) is reproduced at its own
-J, power coefficient, rotational speed, density and airplane Mach number: XROTOR POWE at fixed
-rpm sets the blade angle to absorb the measured power, as the propeller's governor did, and
+J, power coefficient, rotational speed, density and airplane Mach number: the blade angle
+that absorbs the measured power at fixed rpm, as the propeller's governor did, comes from
+pyxrotor.robust.solve_power (XROTOR POWE, then continuation in Mach number, then a
+fixed-pitch scan), and
 the efficiency, thrust coefficient and blade angle are compared with the measured ones.
 
     run(row, mach_scale=1)  one test run; mach_scale scales the airplane (and tip) Mach
@@ -34,21 +36,18 @@ a slipstream total-pressure survey (the report's method, reference 1 there).
 from __future__ import annotations
 
 import csv
-import importlib.util
 import json
 import math
 from pathlib import Path
 
 import numpy as np
 
+from pyxrotor import robust
+from pyxrotor import sections as sections_
 from pyxrotor.constants import PI
 from pyxrotor.rotor import Rotor
 
 HERE = Path(__file__).resolve().parent
-_spec = importlib.util.spec_from_file_location("naca747_model", HERE.parent / "naca747" / "model.py")
-_m747 = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_m747)
-clark_y = _m747.clark_y                              # the shared section model
 
 PROPS = {
     "l177": ("geometry_l177.json", ("l177_table1.csv", "l177_table2.csv")),
@@ -75,9 +74,7 @@ def sections(mcrit_shift: float = 0.0, geo: dict = GEO):
     xs = [r[0], 0.30, 0.35, 0.40, 0.45, 0.50, 0.60, 0.70, 0.80, 1.0]
     out = []
     for x in xs:
-        s = clark_y(float(np.interp(x, r, t)), float(x))
-        s.mcrit = s.mcrit + mcrit_shift
-        out.append(s)
+        out.append(sections_.clark_y(float(np.interp(x, r, t)), float(x), mcrit_shift))
     return out
 
 
@@ -123,30 +120,19 @@ def run(row: dict, mach_scale: float = 1.0, beta_guess: float | None = None,
     if beta0 is None:
         beta0 = float(row["beta_deg"]) if row.get("beta_deg") else 30.0 + 7.0 * (J - 1.0)
 
-    def solve(beta_start):
-        r = Rotor(fix_all=True, **fixes)
-        r.s.rho, r.s.vso, r.s.rmu = rho, a, rmu
-        r.set_sections(sections(mcrit_shift, geo))
-        rr, cc, bb = blade(beta_start, geo)
-        rr[0] = (rr[0] * R) / R                        # ARBI's XI0 = (hub R)/R, to the ulp
-        r.arbi(nblds=geo["nblds"], vel=vel, tip_radius=R, hub_radius=rr[0] * R,
-               r_over_R=rr, c_over_R=cc, beta_deg=bb)
-        return r.solve_power(power, fix="rpm", rpm=60.0 * n), r
-
-    ok, r = solve(beta0)
-    retried = False
-    if not ok and beta_guess is None and mach_scale > 0.05:
-        # start again from the blade angle of the same run without compressibility
-        start = run(row, mach_scale=0.01, mcrit_shift=mcrit_shift, prop=prop, **fixes)
-        if start["converged"]:
-            ok, r = solve(start["beta75"])
-            retried = True
-    p = r.performance()
-    beta75 = float(np.interp(0.75, r.s.xi[:r.s.ii], r.s.beta[:r.s.ii])) * 180.0 / PI
-    ct = p["thrust"] / (rho * n * n * D ** 4)
+    r = Rotor(fix_all=True, **fixes)
+    r.s.rho, r.s.vso, r.s.rmu = rho, a, rmu
+    r.set_sections(sections(mcrit_shift, geo))
+    rr, cc, bb = blade(beta0, geo)
+    rr[0] = (rr[0] * R) / R                            # ARBI's XI0 = (hub R)/R, to the ulp
+    r.arbi(nblds=geo["nblds"], vel=vel, tip_radius=R, hub_radius=rr[0] * R,
+           r_over_R=rr, c_over_R=cc, beta_deg=bb)
+    sol = robust.solve_power(r, power, 60.0 * n)
+    ok = sol.usable
+    ct = sol.thrust / (rho * n * n * D ** 4)
     return {"prop": prop, "run": row["run"], "converged": bool(ok), "J": J, "CP": cp, "M": m,
-            "Mt": m * math.sqrt(1.0 + (PI / J) ** 2), "eta": p["efficiency"], "CT": ct,
-            "beta75": beta75, "retried": retried}
+            "Mt": m * math.sqrt(1.0 + (PI / J) ** 2), "eta": sol.efficiency, "CT": ct,
+            "beta75": sol.beta75_deg, "method": sol.method}
 
 
 def table(name: str) -> list[dict]:

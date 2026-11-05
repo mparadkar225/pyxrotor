@@ -25,7 +25,7 @@ def main():
         rec = {k: float(v) for k, v in row.items()}
         for name, kw in SETTINGS.items():
             o = model.run(row, **kw)
-            rec[name] = {k: o[k] for k in ("converged", "eta", "beta75", "CT")}
+            rec[name] = {k: o[k] for k in ("converged", "method", "eta", "beta75", "CT")}
         out.append(rec)
     (HERE / "results.json").write_text(json.dumps(out, indent=0))
     print("mean (model - test working-part efficiency) by tip Mach [converged/runs]")

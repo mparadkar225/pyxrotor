@@ -39,9 +39,9 @@ propellers are used here, all with NACA 16-series sections:
   design CL + 0.85 (+ 1.1 above 12% thickness), unless `stall_margin` sets it.
 - **Hub and body.** The hub is at 0.2R. There is no body: the cowl flow isn't known.
 - **Air.** ISA at 30,000 ft. Only the Reynolds number depends on it.
-- **Operating point.** Each point is solved at the test's M0, J and CP. XROTOR POWE runs at
-  fixed rpm, continued in Mach number from the solution without compressibility, with a
-  fixed-pitch scan when POWE fails.
+- **Operating point.** Each point is solved at the test's M0, J and CP, at fixed rpm, with
+  `pyxrotor.robust.solve_power`: XROTOR POWE, then POWE continued in Mach number from the
+  solution without compressibility, then a fixed-pitch scan.
 
 ## Installation offset
 - Away from stall and at tip Mach < 0.8, the model's efficiency is above the test's, by
@@ -67,7 +67,8 @@ falls more than 0.08 below the curve's peak):
 
 | propeller | M0 | J | tip Mach | 7.55 | Mcrit + 0.15 | Mcrit + 0.20 | no compressibility |
 |---|---|---|---|---|---|---|---|
-| 836 | 0.5 | 1.75 | 1.03 | −0.127 | −0.017 [3/4] | +0.056 | +0.102 |
+| 836 | 0.5 | 1.75 | 1.03 | −0.126 | +0.030 | +0.056 | +0.102 |
+| 836, CP ≥ 0.3 only | 0.5 | 1.75 | 1.03 | −0.127 | −0.015 | +0.013 | +0.068 |
 | 836 | 0.3 | 1.00 | 0.99 | −0.178 | −0.001 | +0.009 | +0.019 |
 | 732 | 0.5 | 2.20 | 0.87 | −0.050 | −0.006 | −0.005 | −0.004 |
 | 836 | 0.5 | 2.20 | 0.87 | −0.014 | +0.038 | +0.040 | +0.044 |
@@ -77,12 +78,15 @@ falls more than 0.08 below the curve's peak):
 | Aeroproducts | 0.5 | 2.40 | 0.82 | +0.016 | +0.029 | +0.029 | +0.028 |
 | Aeroproducts | 0.4 | 1.75 | 0.82 | +0.002 | +0.013 | +0.013 | +0.014 |
 
-- **At sonic tips, Mcrit + 0.15 is right again.** On the Curtiss 836 at tip Mach 0.99–1.03,
-  7.55 loses 0.13–0.18 too much.
-  - Mcrit + 0.15 is within 0.02 on both curves.
-  - At tip Mach 1.03, Mcrit + 0.20 is 0.056 high and no compressibility is 0.10 high.
-  - This is the P-47 and YP-39 correction. Thinner 16-series blades (RM L51L28, SR-2) wanted
-    + 0.20, but here the tips are 6% thick.
+- **At sonic tips, Mcrit + 0.15 or + 0.20 fits; 7.55 doesn't.** On the Curtiss 836 at tip
+  Mach 0.99–1.03, 7.55 loses 0.13–0.18 too much.
+  - At CP 0.3 and above, Mcrit + 0.15 and + 0.20 are both within 0.02 on both curves. No
+    compressibility is 0.07 high at tip Mach 1.03.
+  - At the lightest loading, CP 0.19 at J 1.75, the test's efficiency is 0.65: below even
+    7.55 (by 0.065) and 0.16 below Mcrit + 0.15. The sections there work far below their
+    design CL, where XROTOR lowers Mcrit by 0.25 |CL − CLDMIN|; one point can't say more.
+  - The P-47 tests (`validation/naca_p47`) are what rule out + 0.20 on 5–7% tips; these
+    data agree with them but can't separate the two.
 - **At tip Mach 0.82–0.87 the settings differ by less than 0.06, and 7.55 is a little low.**
   Over these seven curves 7.55 averages −0.019 and Mcrit + 0.15 +0.007.
 - **Stall breakdown is missed.** At low J and high CP, the test's efficiency drops by 0.2–0.4
@@ -101,7 +105,8 @@ falls more than 0.08 below the curve's peak):
 - **Curtiss 836 at Mach 0.3, J 1.0–1.3**, tip Mach 0.78–0.99: the efficiency falls steadily
   from 0.83 to 0.2 as CP rises from 0.1 to 1.0.
   - Before the breakdown, all settings except 7.55 are within 0.02.
-  - Past it, Mcrit + 0.15 converges on 2 of 5 points at J 1.0, and is within 0.04 on J 1.3.
+  - Past it, Mcrit + 0.15 has a usable solution on 3 of 5 points at J 1.0, and is within
+    0.05 on J 1.3.
 
 `tests/measurement/test_yp47m.py` pins these findings.
 

@@ -8,8 +8,8 @@ propellers on YP-47M airplane at high blade loadings", parts I, II, IV, V):
     curtiss_836-14C2-18R1   NTRS 20030063262   13 ft
 
 All have NACA 16-series sections. Geometry (geometry.json) is traced from each report's
-figure 1 (digitizing/). Sections are the 16-series estimate of the RM L51L28 comparison
-(validation/naca_l51l28): Mcrit = 0.85 - 1.2 t plus a shift, at the traced design CL.
+figure 1 (digitizing/). Sections are pyxrotor.sections.naca16 at the traced t/c and
+design CL: Mcrit = 0.85 - 1.2 t plus a shift (or the calibrated rule, mcrit_shift=None).
 
 The tests give efficiency against power coefficient at constant J and free-stream Mach
 number (0.3-0.5). A point is reproduced at the test's M0, J and CP. The air is ISA at
@@ -17,28 +17,26 @@ number (0.3-0.5). A point is reproduced at the test's M0, J and CP. The air is I
 depends on it). No body: the YP-47M cowl's velocity field isn't known.
 
     run(prop, M0, J, cp, mcrit_shift=0, mach_scale=1, stall_margin=None)
-        XROTOR POWE at fixed rpm, continued in Mach number from the blade angle without
-        compressibility (mach_scale 0.01). If POWE fails at full Mach number, the blade angle
-        is found from fixed-pitch solves on a 0.5 deg grid as in validation/nasa_propfan.
+        The blade angle for the test's power at fixed rpm, from pyxrotor.robust.solve_power
+        (XROTOR POWE; if that fails, continued in Mach number from the solution without
+        compressibility; if that fails, interpolated between fixed-pitch solves).
 """
 from __future__ import annotations
 
 import csv
-import importlib.util
 import json
 import math
 from pathlib import Path
 
 import numpy as np
 
+from pyxrotor import robust
 from pyxrotor.constants import PI
+from pyxrotor.sections import naca16
 from pyxrotor.rotor import Rotor
 
 HERE = Path(__file__).resolve().parent
 GEO = json.loads((HERE / "geometry.json").read_text())
-_spec = importlib.util.spec_from_file_location("l51l28_model", HERE.parent / "naca_l51l28" / "model.py")
-ml51 = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(ml51)
 
 INCH = 0.0254
 HUB = 0.20
@@ -54,7 +52,7 @@ def sections(prop: str, mcrit_shift: float = 0.0, stall_margin: float | None = N
     out = []
     for x in (HUB, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.0):
         cld = float(np.interp(x, r, c))
-        s = ml51.section(float(np.interp(x, r, t)), float(x), cld, mcrit_shift)
+        s = naca16(float(np.interp(x, r, t)), float(x), cld, mcrit_shift)
         if stall_margin is not None:
             s.clmax = cld + stall_margin
         out.append(s)
@@ -85,61 +83,18 @@ def _rotor(prop, M0, J, beta, mcrit_shift, mach_scale, stall_margin=None):
     return r, n, D
 
 
-def _state(r, n, D):
-    p = r.performance()
-    return {"CP": p["power"] / (RHO_ALT * n ** 3 * D ** 5), "CT": p["thrust"] / (RHO_ALT * n * n * D ** 4),
-            "eta": p["efficiency"],
-            "beta75": float(np.interp(0.75, r.s.xi[:r.s.ii], r.s.beta[:r.s.ii])) * 180.0 / PI}
-
-
-def _powe(prop, M0, J, cp, beta, mcrit_shift, ms, sm=None):
-    r, n, D = _rotor(prop, M0, J, beta, mcrit_shift, ms, sm)
-    ok = r.solve_power(cp * RHO_ALT * n ** 3 * D ** 5, fix="rpm", rpm=60.0 * n)
-    return bool(ok), _state(r, n, D)
-
-
-def _fixed(prop, M0, J, beta, mcrit_shift, ms, sm=None):
-    r, n, D = _rotor(prop, M0, J, beta, mcrit_shift, ms, sm)
-    ok = r.solve_rpm(60.0 * n)
-    return bool(ok), _state(r, n, D)
-
-
-def run(prop: str, M0: float, J: float, cp: float, mcrit_shift: float = 0.0,
+def run(prop: str, M0: float, J: float, cp: float, mcrit_shift: float | None = 0.0,
         mach_scale: float = 1.0, stall_margin: float | None = None) -> dict:
-    out = {"prop": prop, "M0": M0, "J": J, "CP": cp, "method": None, "usable": False,
-           "eta": float("nan"), "CT": float("nan"), "beta75": float("nan"),
-           "Mt": M0 * mach_scale * math.sqrt(1.0 + (PI / J) ** 2)}
+    """One point at the test's M0, J and CP (pyxrotor.robust.solve_power at fixed rpm).
+    mcrit_shift None is pyxrotor.sections' calibrated Mcrit."""
     # start from the advance angle at 0.75R plus 5 deg; POWE from far below it can settle
     # on a negative-thrust branch
     guess = math.degrees(math.atan(J / (0.75 * PI))) + 5.0
-    ok, st = _powe(prop, M0, J, cp, guess, mcrit_shift, 0.01, stall_margin)
-    if not ok:
-        return out
-    beta0 = beta = st["beta75"]
-    if mach_scale > 0.01:
-        for ms in [s for s in (0.6, 0.8, 0.9) if s < mach_scale] + [mach_scale]:
-            ok, st = _powe(prop, M0, J, cp, beta, mcrit_shift, ms, stall_margin)
-            if not ok:
-                break
-            beta = st["beta75"]
-    if ok:
-        out.update(st, CP=cp, method="POWE", usable=True)
-        return out
-    # fixed-pitch scan, linear interpolation at the target CP between converged neighbours
-    pts = []
-    for db in np.arange(-6.0, 4.01, 0.5):
-        ok, st = _fixed(prop, M0, J, beta0 + db, mcrit_shift, mach_scale, stall_margin)
-        if ok and math.isfinite(st["eta"]):
-            pts.append(st)
-    for lo, hi in zip(pts, pts[1:]):
-        if lo["CP"] <= cp <= hi["CP"]:
-            f = (cp - lo["CP"]) / (hi["CP"] - lo["CP"])
-            for k in ("CT", "eta", "beta75"):
-                out[k] = lo[k] + f * (hi[k] - lo[k])
-            out["method"] = "scan"
-            out["usable"] = hi["beta75"] - lo["beta75"] < 1.1 and abs(hi["eta"] - lo["eta"]) < 0.06
-            break
-    return out
+    r, n, D = _rotor(prop, M0, J, guess, mcrit_shift, mach_scale, stall_margin)
+    sol = robust.solve_power(r, cp * RHO_ALT * n ** 3 * D ** 5, 60.0 * n)
+    return {"prop": prop, "M0": M0, "J": J, "CP": cp, "method": sol.method, "usable": sol.usable,
+            "eta": sol.efficiency, "CT": sol.thrust / (RHO_ALT * n * n * D ** 4),
+            "beta75": sol.beta75_deg, "Mt": M0 * mach_scale * math.sqrt(1.0 + (PI / J) ** 2)}
 
 
 def points() -> list[dict]:

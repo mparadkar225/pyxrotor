@@ -6,8 +6,8 @@ breakdown) is removed first. What these tests pin:
   * the offsets behave like a drag area: DCT/J^2 between 0.001 and 0.004;
   * the traced Aeroproducts and Curtiss 732 blades reproduce their reports' activity factors;
   * at helical tip Mach 0.99-1.03 (Curtiss 836), 7.55 with Mcrit = 0.85 - 1.2 t loses 0.13-0.18
-    too much; Mcrit + 0.15 is within 0.03, Mcrit + 0.20 and no compressibility are too high
-    at tip Mach 1.03;
+    too much; Mcrit + 0.15 and + 0.20 are within 0.03, no compressibility is about 0.07
+    too high at tip Mach 1.03; at the lightest loading (CP 0.19) the test is below even 7.55;
   * at tip Mach 0.84-0.87 the settings differ by less than 0.06 and Mcrit + 0.15 is within
     0.04 on every curve;
   * past the breakdown at high CP and low J (blade stall), the model with its stall CL of
@@ -71,13 +71,23 @@ def test_traced_activity_factor(prop):
 
 @pytest.mark.parametrize("M0, J", [(0.3, 1.0), (0.5, 1.75)])
 def test_sonic_tip_wants_mcrit_plus_015(results, M0, J):
+    """Before the breakdown; at J 1.75 without the lightest-loaded point (see below)."""
     cv, _ = results
-    rows = cv[("curtiss_836-14C2-18R1", M0, J)]
+    rows = [r for r in cv[("curtiss_836-14C2-18R1", M0, J)] if r["CP"] > 0.25 or J < 1.5]
     assert _mean(rows, "7.55") < -0.1
     assert abs(_mean(rows, "mcrit+0.15")) < 0.03
-    if J == 1.75:                               # tip Mach 1.03
-        assert _mean(rows, "mcrit+0.20") > 0.04
-        assert _mean(rows, "incompressible") > 0.08
+    if J == 1.75:                               # tip Mach 1.03: + 0.20 fits as well
+        assert abs(_mean(rows, "mcrit+0.20")) < 0.03
+        assert _mean(rows, "incompressible") > 0.05
+
+
+def test_sonic_tip_light_loading(results):
+    """Curtiss 836 at J 1.75, CP 0.19 (tip Mach 1.03, sections far below their design CL):
+    the test is 0.16 below Mcrit + 0.15, and even 0.065 below 7.55's thickness Mcrit."""
+    cv, _ = results
+    r = [r for r in cv[("curtiss_836-14C2-18R1", 0.5, 1.75)] if r["CP"] < 0.25][0]
+    res = {k: r[k]["eta"] - r["offset"] - r["eta_test"] for k in ("7.55", "mcrit+0.15")}
+    assert -0.09 < res["7.55"] < -0.04 and res["mcrit+0.15"] > 0.12, res
 
 
 def test_tip_mach_085_settings_close(results):

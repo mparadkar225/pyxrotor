@@ -235,13 +235,13 @@ the I/O and the new models are Python; the compiled APITER/APINIT call back into
   iteration often ends in a small limit cycle or fails; POWE fails more than RPM, so the
   propfan model scans blade angle with fixed-pitch solves.
   YP-39 flight test of the Report 747 Clark Y blade (`validation/naca_yp39`, NTRS
-  20150011182, tip Mach 0.95-1.06): Mcrit + 0.15 within 0.03 of the working-part efficiency
-  (the round shanks aren't modeled; their loss grows to 0.24); 7.55 loses 0.1-0.9 too much.
+  20150011182, tip Mach 0.95-1.06): Mcrit + 0.15 and + 0.20 both within 0.035 of the
+  working-part efficiency (the round shanks aren't modeled; their loss grows to 0.24); 7.55
+  loses 0.1-0.9 too much. The P-47 data are what rule out + 0.20 on 5-7% tips.
   YP-47M altitude-wind-tunnel series, four 16-series four-blade propellers
   (`validation/naca_yp47m`): one installation offset per propeller, a constant
   dCT/J^2 = 0.0014-0.0030, is fitted and removed (the reports' "trends only"). At tip Mach
-  0.99-1.03, Mcrit + 0.15 is within 0.02 and 7.55 is 0.13-0.18 low. These 6%-thick tips want
-  + 0.15, not the + 0.20 of the 2-4% tips. The stall breakdown at low J and high CP (tip Mach
+  0.99-1.03, Mcrit + 0.15 and + 0.20 are within 0.02 (CP >= 0.3) and 7.55 is 0.13-0.18 low. The stall breakdown at low J and high CP (tip Mach
   0.72-0.84) is missed: XROTOR's CLMAX (here design CL + 0.85) falls with Mach number only
   near Mcrit + 0.215, but 16-series sections stall lower at local Mach 0.6-0.7. No single
   stall CL fits all four.
@@ -302,6 +302,19 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   developed). Digitizing: a crop whose lowest grid line is not the axis shifts every
   value by one step; check CT·J/CP against the report's efficiency curves. Solid vs
   dashed lines: separate by connected-component length (`validation/naca747/digitizing`).
+* `sections`: Clark Y and NACA 16-series estimates from thickness (and design CL), as the
+  validation models use them. Default `mcrit_shift=None` is the calibrated Mcrit: 0.85 - 1.2 t
+  plus 0.15 at t >= 5%, 0.20 at t <= 4.5%, linear between (P-47, YP-39, YP-47M at 5-7%;
+  L51L28, SR-2 at 2-4.4%). `tests/measurement/test_calibrated_sections.py` checks it on all
+  six datasets; `mcrit_shift=0.0` is the plain estimate, bit-identical to what the earlier
+  comparisons built.
+* `robust`: `solve_power` (POWE; then POWE continued in Mach number from vso x 100; then
+  interpolation between fixed-pitch solves) and `solve_fixed_pitch` (RPM, accepting a
+  small limit cycle). A limit cycle needs a small spread *and* live Newton steps: a stalled
+  APITER (RLX 0, a large DGAM never taken) has no spread at all but is no solution (static
+  L51L28 at -2 deg). Where POWE converges, `solve_power` is POWE bit for bit. The P-47,
+  YP-39 and YP-47M models use it; with it, every P-47 run but one has a solution with
+  Mcrit + 0.15 (POWE with one restart left 14 unconverged).
 * `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).
   Subtraction underflows within ~1e-8 of r = a and gave NaN.
 

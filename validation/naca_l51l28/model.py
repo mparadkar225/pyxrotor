@@ -43,6 +43,7 @@ from pathlib import Path
 import numpy as np
 
 from pyxrotor.aero import AeroSection
+from pyxrotor.sections import naca16
 from pyxrotor.constants import PI
 from pyxrotor.rotor import Rotor
 
@@ -55,14 +56,10 @@ J_STATIC = 0.002
 A_SL, RHO_SL, MU_SL = 340.294, 1.2250, 1.7894e-5
 
 
-def section(t: float, xisect: float, cld: float, mcrit_shift: float = 0.0) -> AeroSection:
-    """NACA 16-series section of design CL cld and thickness ratio t (estimated)."""
-    return AeroSection(
-        xisect=xisect, a0=-cld / (2.0 * PI), dclda=6.0,
-        clmax=cld + (1.1 if t > 0.12 else 0.85), clmin=cld - 0.85, dclda_stall=0.1,
-        dcl_stall=0.1, cdmin=0.0065 + 0.25 * t * t, cldmin=cld,
-        dcdcl2=0.007 + 0.01 * max(t - 0.066, 0.0), cmcon=-0.25 * cld,
-        mcrit=max(0.85 - 1.2 * t, 0.5) + mcrit_shift, reref=2.0e6, rexp=-0.15)
+def section(t: float, xisect: float, cld: float, mcrit_shift: float | None = 0.0) -> AeroSection:
+    """NACA 16-series section of design CL cld and thickness ratio t (pyxrotor.sections.naca16;
+    mcrit_shift None is its calibrated Mcrit)."""
+    return naca16(t, xisect, cld, mcrit_shift)
 
 
 def sections(cld: float, mcrit_shift: float = 0.0):

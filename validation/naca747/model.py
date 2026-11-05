@@ -19,8 +19,8 @@ from pathlib import Path
 
 import numpy as np
 
+from pyxrotor import sections as sections_
 from pyxrotor.aero import AeroSection
-from pyxrotor.constants import PI
 from pyxrotor.pair import RotorPair
 from pyxrotor.rotor import Rotor
 
@@ -37,13 +37,9 @@ REAR = {20: 19.8, 25: 24.6, 30: 29.4, 35: 34.2, 40: 38.9, 45: 43.7, 50: 48.4, 55
 
 
 def clark_y(t: float, xisect: float) -> AeroSection:
-    """Clark Y characteristics for thickness ratio t (estimated; see the module docstring)."""
-    a0 = max(-0.37 * 100.0 * t, -6.0)
-    return AeroSection(
-        xisect=xisect, a0=a0 * PI / 180.0, dclda=max(6.3 - 4.0 * (t - 0.066), 5.2),
-        clmax=1.3 if t < 0.20 else 1.1, clmin=-0.5, dclda_stall=0.1, dcl_stall=0.1,
-        cdmin=0.0065 + 0.25 * t * t, cldmin=0.35, dcdcl2=0.007 + 0.01 * max(t - 0.066, 0.0),
-        cmcon=-0.1, mcrit=max(0.85 - 1.2 * t, 0.5), reref=2.0e6, rexp=-0.15)
+    """Clark Y characteristics for thickness ratio t (pyxrotor.sections.clark_y, with the
+    plain thickness estimate of Mcrit: these tests are at low Mach number)."""
+    return sections_.clark_y(t, xisect, mcrit_shift=0.0)
 
 
 def sections():

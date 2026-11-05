@@ -9,8 +9,9 @@ a spinner to 12 3/8 in radius (0.205R) and no cuffs.
 Each run (flight_runs.csv) is reproduced at the test's true airspeed, density altitude
 and power. Engine speed 3000 rpm with 1.8:1 gearing gives 1666.7 propeller rpm, and the
 reported tip Mach numbers confirm it (1656-1671 rpm). The speed of sound comes from the
-reported V and M; the density from the density altitude. XROTOR POWE at fixed rpm sets the
-blade angle (the test's pitch was locked at the governed angle).
+reported V and M; the density from the density altitude. The blade angle for the test's
+power at fixed rpm comes from pyxrotor.robust.solve_power (XROTOR POWE, then continuation
+in Mach number, then a fixed-pitch scan).
 
     run(row, mcrit_shift=0, mach_scale=1)   one run; mcrit_shift raises every section's
                                             critical Mach number, mach_scale=0.01 removes
@@ -30,6 +31,8 @@ from pathlib import Path
 
 import numpy as np
 
+from pyxrotor import robust
+from pyxrotor import sections as sections_
 from pyxrotor.constants import PI
 from pyxrotor.rotor import Rotor
 
@@ -58,9 +61,7 @@ def sections(mcrit_shift: float = 0.0):
     r = np.array(m747.GEO["r_over_R"])
     t = np.array(m747.GEO["h_over_b"])
     for x in [HUB, 0.30, 0.35, 0.40, 0.45, 0.50, 0.60, 0.70, 0.80, 1.0]:
-        s = m747.clark_y(float(np.interp(x, r, t)), float(x))
-        s.mcrit = s.mcrit + mcrit_shift
-        out.append(s)
+        out.append(sections_.clark_y(float(np.interp(x, r, t)), float(x), mcrit_shift))
     return out
 
 
@@ -87,32 +88,19 @@ def run(row: dict, mcrit_shift: float = 0.0, mach_scale: float = 1.0, beta_guess
     n = RPM / 60.0
     power = float(row["bhp"]) * HP
 
-    def solve(beta, ms):
-        r = Rotor(fix_all=True)
-        r.s.rho, r.s.vso, r.s.rmu = rho, a / ms, mu
-        r.set_sections(sections(mcrit_shift))
-        rr, cc, bb = blade(beta)
-        rr[0] = (rr[0] * R) / R
-        r.arbi(nblds=3, vel=V, tip_radius=R, hub_radius=rr[0] * R, r_over_R=rr, c_over_R=cc,
-               beta_deg=bb)
-        ok = r.solve_power(power, fix="rpm", rpm=RPM)
-        b75 = float(np.interp(0.75, r.s.xi[:r.s.ii], r.s.beta[:r.s.ii])) * 180.0 / PI
-        return ok, r, b75
-
-    # continuation in Mach number from the incompressible blade angle
-    ok, r, beta = solve(beta_guess, 0.01)
-    for ms in [s for s in (0.6, 0.8, 0.9) if s < mach_scale] + [mach_scale]:
-        if ms <= 0.01:
-            break
-        ok, r, b = solve(beta, ms)
-        if not ok:
-            break
-        beta = b
-    p = r.performance()
+    r = Rotor(fix_all=True)
+    r.s.rho, r.s.vso, r.s.rmu = rho, a / mach_scale, mu
+    r.set_sections(sections(mcrit_shift))
+    rr, cc, bb = blade(beta_guess)
+    rr[0] = (rr[0] * R) / R
+    r.arbi(nblds=3, vel=V, tip_radius=R, hub_radius=rr[0] * R, r_over_R=rr, c_over_R=cc,
+           beta_deg=bb)
+    sol = robust.solve_power(r, power, RPM)
+    ok, beta = sol.usable, sol.beta75_deg
     J = V / (n * D)
-    return {"V_mph": float(row["V_mph"]), "converged": bool(ok), "eta": p["efficiency"],
-            "beta75": beta, "J": J, "CP": power / (rho * n ** 3 * D ** 5),
-            "CT": p["thrust"] / (rho * n * n * D ** 4),
+    return {"V_mph": float(row["V_mph"]), "converged": bool(ok), "method": sol.method,
+            "eta": sol.efficiency, "beta75": beta, "J": J, "CP": power / (rho * n ** 3 * D ** 5),
+            "CT": sol.thrust / (rho * n * n * D ** 4),
             "Mt": M * mach_scale * math.sqrt(1.0 + (PI / J) ** 2), "rotor": r}
 
 

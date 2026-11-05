@@ -23,6 +23,8 @@ used as a library and verified routine by routine against the original Fortran.
 | MODI | To do |
 | **Beyond XROTOR:** induced-velocity field off the disk (`Rotor.induced_field()`), the base for rotor-rotor interaction | New model, validated against exact limits and an independent discrete vortex wake (`tests/model`) |
 | **Beyond XROTOR:** contra-rotating and tandem pairs (`RotorPair`): coupled solve; fixed pitch, power or thrust with a torque split, power at fixed pitch; gear ratio; shared nacelle | New model, validated by limits (`tests/model/test_pair.py`) and NACA Report 747 tunnel data |
+| **Beyond XROTOR:** section estimates (`pyxrotor.sections`: Clark Y, NACA 16-series) with a critical Mach number calibrated on transonic propeller tests | New model, checked against six flight and tunnel datasets (`tests/measurement/test_calibrated_sections.py`) |
+| **Beyond XROTOR:** transonic solves (`pyxrotor.robust`: power at fixed rpm, fixed pitch) that keep working near the local-Mach cap | New, checked against XROTOR's own converged solutions (`tests/model/test_robust.py`) |
 | CROTOR's counter-rotation iteration (`RotorPair(interaction="weights")`: VPUT/VGET with fixed weights, CROTOR 755-ES1.3 `CROT` `RPM` and `POWE` with `FIX`/`SYNC`) | Ported, bit-identical to a shim transcription of crotor.f; it is the field model's zero-spacing limit |
 | BEND, NOIS, xrotor.def, PVAR files | To do |
 
@@ -59,6 +61,31 @@ rear.set_slipstream(p["r"], p["u"], p["v"],   # VGET: swirl weight -1 = counter-
                     axial_weight=1.0, swirl_weight=-1.0)
 r2.nacelle(z=[0, 0.5, 1.0], area=[-0.1, -0.35, -0.45], rotor_z=0.15, wake_area=-0.3)
 ```
+
+### Transonic tips
+
+```python
+from pyxrotor import robust, sections
+
+secs = [sections.naca16(t, x, 0.5) for x, t in [(0.2, 0.30), (0.5, 0.09), (1.0, 0.05)]]  # r/R, t/c
+r.set_sections(secs)
+sol = robust.solve_power(r, 1.5e6, rpm=1300.0)   # constant speed: blade angle for 1.5 MW
+sol.usable, sol.exact, sol.method, sol.efficiency, sol.thrust, sol.beta75_deg
+```
+
+XROTOR's compressibility model with the usual thickness estimate Mcrit = 0.85 - 1.2 t loses
+far too much efficiency at transonic tips (0.1-0.9 at helical tip Mach 0.95-1.17, on every
+propeller tested). `pyxrotor.sections` adds 0.15 to that estimate at 5% thickness and above
+and 0.20 at 4.5% and below, which fits P-47 and YP-39 flight tests, YP-47M and SR-2 tunnel
+tests and RM L51L28 static tests (`validation/`); `mcrit_shift=0.0` gives the plain estimate.
+Near the 0.99 local-Mach cap XROTOR's Newton iteration often fails or ends in a small limit
+cycle, its power solve more often than its fixed-pitch one. `robust.solve_power` tries POWE,
+then POWE continued in Mach number from the solution without compressibility, then
+interpolation between fixed-pitch solves (accepting small limit cycles);
+`robust.solve_fixed_pitch` is RPM with the limit-cycle acceptance. `sol.exact` says whether
+the rotor holds a converged XROTOR solution of the request. Swept (scimitar) blades are not
+predicted: XROTOR's straight lifting line needs 6-8 deg less blade angle than the SR-3
+propfan (`validation/nasa_propfan`).
 
 ### Contra-rotating propellers
 
@@ -129,6 +156,9 @@ compiler. A solve takes about 5.5 ms (the Fortran: 1.8 ms) for the Rotol propell
   Report 747 (four-blade single- and dual-rotating propellers, for `RotorPair`). On 747 the
   counter-rotation peak-efficiency gain matches the test to 0.001 at 45-50° and is about
   0.01 optimistic at low pitch; see [`validation/naca747`](validation/naca747/README.md).
+  Compressibility: P-47 and YP-39 flight tests, the YP-47M altitude-wind-tunnel series, RM
+  L51L28 static tests and NASA's SR-2/SR-3 propfans (`validation/naca_p47`, `naca_yp39`,
+  `naca_yp47m`, `naca_l51l28`, `nasa_propfan`).
 * **The references themselves** (`tests/reference/`): the library build reproduces the
   interactive program's results.
 * **New models** (`tests/model/`), which have no Fortran to match: exact limits and

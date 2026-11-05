@@ -60,6 +60,9 @@ XROTOR is a straight lifting line with 2-D sections, so it has no sweep. Two que
     iterations is accepted when efficiency varies by less than 0.005 and CP by less than 2%.
   - A point is unusable if the bracketing solves are more than 2° apart, or differ in
     efficiency by more than 0.06.
+  - `pyxrotor.robust` now has this method for any rotor (with stricter limit-cycle checks).
+    This model keeps its own copy because the SR-3's diameter changes with blade angle, so
+    each blade angle needs a new rotor.
 
 ## Results (`compare.py`, `results.json`)
 **Design point, J 3.06, CP 1.7: model − test net efficiency** ("—" means no usable solution):

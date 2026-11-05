@@ -39,7 +39,6 @@ static temperature and density follow from M. Only the Reynolds number depends o
 from __future__ import annotations
 
 import csv
-import importlib.util
 import json
 import math
 from pathlib import Path
@@ -47,14 +46,12 @@ from pathlib import Path
 import numpy as np
 
 from pyxrotor.constants import PI
+from pyxrotor.sections import naca16
 from pyxrotor.rotor import Rotor
 
 HERE = Path(__file__).resolve().parent
 GEO = json.loads((HERE / "geometry.json").read_text())
-_spec = importlib.util.spec_from_file_location("naca_l51l28_model", HERE.parent / "naca_l51l28" / "model.py")
-_l51 = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_l51)
-section16 = _l51.section                      # the 16-series estimate (t, xisect, cld, shift)
+section16 = naca16                            # the 16-series estimate (t, xisect, cld, shift)
 
 DREF = 0.6223
 GAMMA, R_AIR = 1.4, 287.05

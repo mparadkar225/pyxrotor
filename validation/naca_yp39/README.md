@@ -25,8 +25,9 @@ at high speeds", NACA, 1942 ([NTRS 20150011182](https://ntrs.nasa.gov/citations/
 ## Model (`model.py`)
 - **Air.** The speed of sound comes from the reported V and M, and the density from the density
   altitude (ISA).
-- **Blade angle.** XROTOR's power solve (POWE) at fixed rpm sets it. The solve is continued in
-  Mach number from the solution without compressibility.
+- **Blade angle.** `pyxrotor.robust.solve_power` at fixed rpm sets it: XROTOR's power solve
+  (POWE), continued in Mach number from the solution without compressibility if it fails,
+  then a fixed-pitch scan. Every run has a solution with every setting.
 - **Shanks.** The round blade shanks (spinner to about 0.35R) are not modeled. The section
   estimates there are Clark Y at the shank thickness. The test shows the shank drag growing
   with speed: entire minus working-part efficiency goes from −0.02 at 273 mph to −0.24 at
@@ -39,14 +40,15 @@ converged runs out of runs:
 | setting | 0.94–0.99 | 0.99–1.035 | 1.035–1.07 |
 |---|---|---|---|
 | 7.55 (Mcrit = 0.85 − 1.2 t) | −0.115 [3/3] | −0.299 [3/3] | −0.885 [4/4] |
-| Mcrit + 0.10 | +0.004 | −0.011 [2/3] | −0.133 |
+| Mcrit + 0.10 | +0.004 | −0.044 | −0.133 |
 | **Mcrit + 0.15** | +0.026 [3/3] | +0.001 [3/3] | −0.029 [4/4] |
-| Mcrit + 0.20 | +0.035 | +0.043 [2/3] | +0.074 [1/4] |
+| Mcrit + 0.20 | +0.035 | +0.018 | +0.014 |
 | no compressibility | +0.040 | +0.033 | +0.042 |
 
-- **Mcrit + 0.15** follows the test to tip Mach 1.06 and converges on every run. This is the
-  correction the P-47 propellers wanted (`validation/naca_p47`), and these are also Clark Y-type
-  sections.
+- **Mcrit + 0.15 and + 0.20** both follow the test to tip Mach 1.06, within 0.035. The
+  run-to-run scatter of the test (±0.04) can't separate them. The P-47 propellers, also
+  Clark Y-type sections, rule out + 0.20 (`validation/naca_p47`); `pyxrotor.sections`'
+  calibrated rule gives + 0.15 here.
 - **7.55** loses 0.1–0.9 too much.
 - **Without compressibility** the model is 0.03–0.04 high, so the loss the test shows is real.
   It is small, however, compared with what 7.55 predicts.

@@ -33,9 +33,16 @@ efficiency are 1.5–4% high. The earlier reports use the same method.
   - L-594 and L7D10 don't name their blade sections.
 
 ## Model (`model.py`)
-Each run is solved at the test's J, C_P, rpm, density and Mach number, with XROTOR POWE at
-fixed rpm. The blade angle is found the same way the governor set it. A run that fails to
-converge is restarted from the blade angle of the same run without compressibility.
+Each run is solved at the test's J, C_P, rpm, density and Mach number. The blade angle is
+found the way the governor set it, at fixed rpm, with `pyxrotor.robust.solve_power`:
+1. XROTOR POWE;
+2. if that fails, POWE continued in Mach number from the solution without compressibility;
+3. if that fails too, interpolation between fixed-pitch solves, accepting small limit
+   cycles.
+
+Before that solver was added, a failed run was only restarted once from the blade angle
+without compressibility. That left 5 (L-594) and 9 (L7D10) of 112 runs unconverged with
+Mcrit + 0.15.
 
 All three use the same Clark Y estimate from thickness as the R&M 2357 and NACA 747
 comparisons. That includes Mcrit = 0.85 − 1.2 t at the outer blade: 0.76 for the Curtiss
@@ -58,14 +65,14 @@ Mean (model − test) efficiency by tip Mach, as [converged runs/runs]:
 | **Mcrit + 0.15** | +0.034 | +0.038 | +0.017 | +0.043 | +0.027 [11/11] | +0.005 [2/2] |
 | no compressibility | +0.035 | +0.050 | +0.054 | +0.088 | +0.227 | +0.324 |
 | **Hamilton Std 6507A-2 (L-594)** | | | | | | |
-| 7.55 as configured | +0.052 [7/7] | −0.005 [19/19] | −0.072 [31/31] | −0.153 [20/20] | −0.400 [14/19] | −0.812 [11/16] |
-| Mcrit + 0.10 | +0.064 | +0.041 | +0.015 | −0.007 | −0.044 [18/19] | −0.088 [15/16] |
-| **Mcrit + 0.15** | +0.064 | +0.045 | +0.033 | +0.026 | +0.037 [16/19] | +0.064 [14/16] |
+| 7.55 as configured | +0.052 [7/7] | −0.005 [19/19] | −0.072 [31/31] | −0.153 [20/20] | −0.386 [15/19] | −0.812 [11/16] |
+| Mcrit + 0.10 | +0.064 | +0.041 | +0.015 | −0.007 | −0.044 [18/19] | −0.087 [16/16] |
+| **Mcrit + 0.15** | +0.064 | +0.045 | +0.033 | +0.026 | +0.036 [18/19] | +0.067 [16/16] |
 | no compressibility | +0.065 | +0.049 | +0.045 | +0.053 | +0.107 | +0.185 |
 | **Curtiss 838 (L7D10)** | | | | | | |
-| 7.55 as configured | +0.021 [6/6] | −0.004 [25/25] | −0.057 [28/28] | −0.117 [20/21] | −0.304 [15/16] | −0.985 [11/16] |
-| Mcrit + 0.10 | +0.027 | +0.023 | +0.010 | +0.005 [18/21] | −0.004 [15/16] | −0.136 [14/16] |
-| **Mcrit + 0.15** | +0.027 | +0.024 | +0.021 | +0.030 [19/21] | +0.045 [13/16] | +0.055 [12/16] |
+| 7.55 as configured | +0.021 [6/6] | −0.004 [25/25] | −0.057 [28/28] | −0.118 [21/21] | −0.296 [16/16] | −0.985 [11/16] |
+| Mcrit + 0.10 | +0.027 | +0.023 | +0.010 | +0.005 [21/21] | −0.004 [16/16] | −0.126 [15/16] |
+| **Mcrit + 0.15** | +0.027 | +0.024 | +0.021 | +0.029 [21/21] | +0.052 [16/16] | +0.058 [16/16] |
 | no compressibility | +0.028 | +0.026 | +0.028 | +0.047 | +0.089 | +0.164 |
 
 (For L-594 and L7D10 the first column is tip Mach 0.80–0.85; no run is lower.)
@@ -96,9 +103,10 @@ Mean (model − test) efficiency by tip Mach, as [converged runs/runs]:
   - The shift is a lumped correction: it also absorbs 3-D tip relief, the drag law's shape,
     and the compressible-stall limit. It holds for 5–7% thick tips and helical tip Mach up
     to about 1.15. It is not a general section Mcrit.
-- **Convergence.** With Mcrit + 0.15, 5 of the 112 L-594 runs and 9 of the 112 L7D10 runs
-  don't converge, all at tip Mach 1.0–1.13. More Newton iterations don't help: the solution
-  oscillates near the local-Mach cap. Their last iterates are within about 0.1 of the test.
+- **Convergence.** With Mcrit + 0.15, 1 of the 112 L-594 runs has no usable solution
+  (tip Mach 1.0–1.02), and every L7D10 run has one. XROTOR's own POWE fails on more of them:
+  more Newton iterations don't help, because the solution oscillates near the local-Mach cap.
+  The Mach continuation and the fixed-pitch scan of `pyxrotor.robust` recover them.
 
 `tests/measurement/test_p47_compressibility.py` pins the findings for each propeller.
 
@@ -106,5 +114,4 @@ Mean (model − test) efficiency by tip Mach, as [converged runs/runs]:
 - One section estimate for three blade families.
 - Thrust comes from wake surveys, uncorrected for slipstream rotation.
 - The airplane's spinner and cowl effects are part of the measurement and not of the model.
-- Next: the NACA RM E6-series P-47 reports, then sweep (scimitar) with NASA propfan data.
 - Static tests of thin 16-series blades (`validation/naca_l51l28`) want about +0.20.
