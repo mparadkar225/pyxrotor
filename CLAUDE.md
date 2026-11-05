@@ -227,6 +227,13 @@ the I/O and the new models are Python; the compiled APITER/APINIT call back into
   design CL (XROTOR's 0.25|CL - CLDMIN| Mcrit penalty). At zero advance the model needs
   14-42% too little power at 8-12 deg: the inner blade is stalled and XROTOR's post-stall
   drag 2(excess angle)^2 is far too small.
+  NASA propfans (`validation/nasa_propfan`, `tests/measurement/test_propfan.py`; TM-79124,
+  CR-3505): the straight SR-2 also wants Mcrit + 0.20 (within 0.025 at Mach 0.6-0.85, J 3.06);
+  7.55 loses 0.3-0.75 too much. The swept SR-3 needs 5.8-8.2 deg more blade angle than XROTOR
+  for the design power, and at fixed pitch its CP falls 9%/25% from Mach 0.7 to 0.8/0.85 where
+  XROTOR's rises 15-40% (Prandtl-Glauert with the 0.995 Mach cap). Near the cap XROTOR's Newton
+  iteration often ends in a small limit cycle or fails; POWE fails more than RPM, so the
+  propfan model scans blade angle with fixed-pitch solves.
 
 ## New models (beyond XROTOR)
 

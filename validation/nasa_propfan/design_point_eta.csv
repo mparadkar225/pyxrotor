@@ -1,0 +1,23 @@
+prop,source,M,J,CP,basis,eta,note
+SR-3,CR-3505 Table I row 1,0.45,3.06,1.695,Dref,80.1,
+SR-3,CR-3505 Table I row 2,0.45,3.06,1.695,true D,79.5,extrapolated
+SR-3,CR-3505 Table I row 1,0.6,3.06,1.695,Dref,80.2,
+SR-3,CR-3505 Table I row 2,0.6,3.06,1.695,true D,79.8,
+SR-3,CR-3505 Table I row 1,0.7,3.06,1.695,Dref,80.5,
+SR-3,CR-3505 Table I row 2,0.7,3.06,1.695,true D,80.0,
+SR-3,CR-3505 Table I row 1,0.75,3.06,1.695,Dref,79.6,
+SR-3,CR-3505 Table I row 2,0.75,3.06,1.695,true D,79.2,
+SR-3,CR-3505 Table I row 1,0.8,3.06,1.695,Dref,78.8,
+SR-3,CR-3505 Table I row 2,0.8,3.06,1.695,true D,78.2,
+SR-3,CR-3505 Table I row 1,0.85,3.06,1.695,Dref,77.0,
+SR-3,CR-3505 Table I row 2,0.85,3.06,1.695,true D,76.2,
+SR-2,TM-79124 fig. 14,0.6,3.06,1.7,Dref,78.1,read by eye
+SR-2,TM-79124 fig. 14,0.7,3.06,1.7,Dref,78.05,read by eye
+SR-2,TM-79124 fig. 14,0.75,3.06,1.7,Dref,77.35,read by eye
+SR-2,TM-79124 fig. 14,0.8,3.06,1.7,Dref,75.9,read by eye
+SR-2,TM-79124 fig. 14,0.85,3.06,1.7,Dref,73.4,read by eye
+SR-3,TM-79124 fig. 14,0.6,3.06,1.7,Dref,80.4,read by eye
+SR-3,TM-79124 fig. 14,0.7,3.06,1.7,Dref,80.3,read by eye
+SR-3,TM-79124 fig. 14,0.75,3.06,1.7,Dref,80.3,read by eye
+SR-3,TM-79124 fig. 14,0.8,3.06,1.7,Dref,78.9,read by eye
+SR-3,TM-79124 fig. 14,0.85,3.06,1.7,Dref,77.1,read by eye

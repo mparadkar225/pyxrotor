@@ -1,0 +1,8 @@
+source,beta75,M,J,CP,basis,tip_rel_mach
+CR-3505 text p. 19,60.5,0.7,3.1,1.64,Dref,
+CR-3505 text p. 19,60.5,0.8,3.1,1.49,Dref,
+CR-3505 text p. 19,60.5,0.85,3.1,1.23,Dref,
+CR-3505 Table III (wake-survey points),60.7,0.7,3.007,1.504,true D,1.01
+CR-3505 Table III (wake-survey points),60.7,0.75,2.995,1.457,true D,1.086
+CR-3505 Table III (wake-survey points),60.7,0.8,3.002,1.385,true D,1.158
+CR-3505 Table III (wake-survey points),60.7,0.85,2.978,1.177,true D,1.237
