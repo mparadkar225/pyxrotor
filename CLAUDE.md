@@ -234,6 +234,17 @@ the I/O and the new models are Python; the compiled APITER/APINIT call back into
   XROTOR's rises 15-40% (Prandtl-Glauert with the 0.995 Mach cap). Near the cap XROTOR's Newton
   iteration often ends in a small limit cycle or fails; POWE fails more than RPM, so the
   propfan model scans blade angle with fixed-pitch solves.
+  YP-39 flight test of the Report 747 Clark Y blade (`validation/naca_yp39`, NTRS
+  20150011182, tip Mach 0.95-1.06): Mcrit + 0.15 within 0.03 of the working-part efficiency
+  (the round shanks aren't modeled; their loss grows to 0.24); 7.55 loses 0.1-0.9 too much.
+  YP-47M altitude-wind-tunnel series, four 16-series four-blade propellers
+  (`validation/naca_yp47m`): one installation offset per propeller, a constant
+  dCT/J^2 = 0.0014-0.0030, is fitted and removed (the reports' "trends only"). At tip Mach
+  0.99-1.03, Mcrit + 0.15 is within 0.02 and 7.55 is 0.13-0.18 low. These 6%-thick tips want
+  + 0.15, not the + 0.20 of the 2-4% tips. The stall breakdown at low J and high CP (tip Mach
+  0.72-0.84) is missed: XROTOR's CLMAX (here design CL + 0.85) falls with Mach number only
+  near Mcrit + 0.215, but 16-series sections stall lower at local Mach 0.6-0.7. No single
+  stall CL fits all four.
 
 ## New models (beyond XROTOR)
 
