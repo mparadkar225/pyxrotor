@@ -1,0 +1,540 @@
+{
+ "fig28": [
+  {
+   "airspeed_mph": 225.0,
+   "J": 1.736842105263158,
+   "test_percent": 2.85,
+   "calibrated": {
+    "eta_03": 0.8903855055822683,
+    "eta_03R": 0.8657254110053676,
+    "percent": 2.7695974858411665,
+    "shank_power_fraction": 0.003191929482477287,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.8903855055826535,
+    "eta_03R": 0.8657254110101937,
+    "percent": 2.7695974853412073,
+    "shank_power_fraction": 0.0031919294824772643,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.8903855055822683,
+    "eta_03R": 0.884819983923229,
+    "percent": 0.6250687622548002,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.607862442697764
+  },
+  {
+   "airspeed_mph": 250.0,
+   "J": 1.929824561403509,
+   "test_percent": 3.3,
+   "calibrated": {
+    "eta_03": 0.9009596978158626,
+    "eta_03R": 0.8737906888894927,
+    "percent": 3.015563181375805,
+    "shank_power_fraction": 0.003317987436594295,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.9009596978231332,
+    "eta_03R": 0.8737906889198668,
+    "percent": 3.0155631787871586,
+    "shank_power_fraction": 0.003317987436594196,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.9009596978158626,
+    "eta_03R": 0.8944071643145922,
+    "percent": 0.7272837527755417,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.6243287447100384
+  },
+  {
+   "airspeed_mph": 275.0,
+   "J": 2.1228070175438596,
+   "test_percent": 3.82,
+   "calibrated": {
+    "eta_03": 0.9079950693980339,
+    "eta_03R": 0.8772245001244021,
+    "percent": 3.3888476172047355,
+    "shank_power_fraction": 0.003468832036641608,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.9079950693980519,
+    "eta_03R": 0.8772245000440105,
+    "percent": 3.3888476260603957,
+    "shank_power_fraction": 0.003468832036640922,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.9079950693980339,
+    "eta_03R": 0.8999564892856301,
+    "percent": 0.8853109871767302,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.6420371986581852
+  },
+  {
+   "airspeed_mph": 300.0,
+   "J": 2.3157894736842106,
+   "test_percent": 4.41,
+   "calibrated": {
+    "eta_03": 0.9121856528875494,
+    "eta_03R": 0.8765702486628256,
+    "percent": 3.904403024974378,
+    "shank_power_fraction": 0.0036600074978658174,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.9121856528365565,
+    "eta_03R": 0.8765701170826745,
+    "percent": 3.9044174443142117,
+    "shank_power_fraction": 0.0036600074849113245,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.9121856528875494,
+    "eta_03R": 0.9021295539246016,
+    "percent": 1.1024180144814737,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.6608879619204799
+  },
+  {
+   "airspeed_mph": 325.0,
+   "J": 2.5087719298245617,
+   "test_percent": 5.11,
+   "calibrated": {
+    "eta_03": 0.9139084711106195,
+    "eta_03R": 0.8721222916307585,
+    "percent": 4.572249935388022,
+    "shank_power_fraction": 0.003888603435812499,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.9139084487988434,
+    "eta_03R": 0.872110499297828,
+    "percent": 4.573537924498969,
+    "shank_power_fraction": 0.003888602449320809,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.9139084711106195,
+    "eta_03R": 0.9012682817112956,
+    "percent": 1.383091392507063,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.6807861505075433
+  },
+  {
+   "airspeed_mph": 350.0,
+   "J": 2.7017543859649122,
+   "test_percent": 5.96,
+   "calibrated": {
+    "eta_03": 0.9133179449547838,
+    "eta_03R": 0.8631285442631987,
+    "percent": 5.495282444501823,
+    "shank_power_fraction": 0.004244043290678685,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.9133175979085345,
+    "eta_03R": 0.8630298079923407,
+    "percent": 5.506057261061327,
+    "shank_power_fraction": 0.004244035305926155,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.9133179449547838,
+    "eta_03R": 0.8974679043221371,
+    "percent": 1.7354351483186308,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.7016426569096771
+  },
+  {
+   "airspeed_mph": 375.0,
+   "J": 2.894736842105263,
+   "test_percent": 7.09,
+   "calibrated": {
+    "eta_03": 0.9104020576464893,
+    "eta_03R": 0.8427012013095069,
+    "percent": 7.436368994156072,
+    "shank_power_fraction": 0.005312806762164232,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.910399601030663,
+    "eta_03R": 0.8422201532270093,
+    "percent": 7.488958444892527,
+    "shank_power_fraction": 0.0053127523484332246,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.9104020576464893,
+    "eta_03R": 0.8905307019845001,
+    "percent": 2.182701092895074,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.7233745945418462
+  },
+  {
+   "airspeed_mph": 400.0,
+   "J": 3.0877192982456143,
+   "test_percent": 8.37,
+   "calibrated": {
+    "eta_03": 0.9050137398875437,
+    "eta_03R": 0.8094705725522099,
+    "percent": 10.55709577925369,
+    "shank_power_fraction": 0.006948747384672435,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.9049863145380264,
+    "eta_03R": 0.807735025859227,
+    "percent": 10.746161253106223,
+    "shank_power_fraction": 0.006948504931920785,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.9050137398875437,
+    "eta_03R": 0.8797988567224758,
+    "percent": 2.786132635754359,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.745905450323838
+  },
+  {
+   "airspeed_mph": 425.0,
+   "J": 3.280701754385965,
+   "test_percent": 9.9,
+   "calibrated": {
+    "eta_03": 0.896884858571665,
+    "eta_03R": 0.7661774374004341,
+    "percent": 14.573489553540815,
+    "shank_power_fraction": 0.00877429218154669,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.8951774731639457,
+    "eta_03R": 0.7595703406592395,
+    "percent": 15.148631033510235,
+    "shank_power_fraction": 0.008772460845119043,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.896884858571665,
+    "eta_03R": 0.8638368426364104,
+    "percent": 3.684755698505747,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.7691650202511505
+  },
+  {
+   "airspeed_mph": 450.0,
+   "J": 3.473684210526316,
+   "test_percent": 11.72,
+   "calibrated": {
+    "eta_03": 0.8856258499401538,
+    "eta_03R": 0.7168488167372962,
+    "percent": 19.057374309282274,
+    "shank_power_fraction": 0.01044280825453368,
+    "usable": true
+   },
+   "7.55": {
+    "eta_03": 0.8712691450910723,
+    "eta_03R": 0.6907331085728644,
+    "percent": 20.721040970564474,
+    "shank_power_fraction": 0.010431585724460356,
+    "usable": true
+   },
+   "calibrated, no shank model": {
+    "eta_03": 0.8856258499401538,
+    "eta_03R": 0.8398709000743861,
+    "percent": 5.166397284909825,
+    "shank_power_fraction": 0.0,
+    "usable": true
+   },
+   "Mt": 0.7930891921429871
+  }
+ ],
+ "fig27": [
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.2,
+   "J": 1.9,
+   "eta_test": 0.9,
+   "eta": 0.8995795772177998,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.2,
+   "J": 2.2,
+   "eta_test": 0.937,
+   "eta": 0.909985699373178,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.2,
+   "J": 2.5,
+   "eta_test": 0.946,
+   "eta": 0.9138808366948499,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.2,
+   "J": 2.8,
+   "eta_test": 0.947,
+   "eta": 0.9121303877259375,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.2,
+   "J": 3.1,
+   "eta_test": 0.944,
+   "eta": 0.9045815760128905,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.2,
+   "J": 3.4,
+   "eta_test": 0.933,
+   "eta": 0.8903243290116958,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.15,
+   "J": 1.6,
+   "eta_test": 0.9,
+   "eta": 0.8980457087849204,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.15,
+   "J": 2.0,
+   "eta_test": 0.935,
+   "eta": 0.9131781542335868,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.15,
+   "J": 2.4,
+   "eta_test": 0.945,
+   "eta": 0.915567536630531,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.15,
+   "J": 2.8,
+   "eta_test": 0.938,
+   "eta": 0.9077497581491716,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.15,
+   "J": 3.1,
+   "eta_test": 0.92,
+   "eta": 0.8944708833449019,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.15,
+   "J": 3.4,
+   "eta_test": 0.9,
+   "eta": 0.8731681693825538,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.1,
+   "J": 1.6,
+   "eta_test": 0.925,
+   "eta": 0.9100765140968555,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.1,
+   "J": 2.0,
+   "eta_test": 0.94,
+   "eta": 0.9132264348561583,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.1,
+   "J": 2.3,
+   "eta_test": 0.944,
+   "eta": 0.9082271136959342,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.1,
+   "J": 2.6,
+   "eta_test": 0.935,
+   "eta": 0.8974490639842114,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.1,
+   "J": 3.0,
+   "eta_test": 0.912,
+   "eta": 0.8720782358395944,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03",
+   "CP": 0.1,
+   "J": 3.4,
+   "eta_test": 0.852,
+   "eta": 0.8290062058537839,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.2,
+   "J": 1.9,
+   "eta_test": 0.865,
+   "eta": 0.8728735906874587,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.2,
+   "J": 2.2,
+   "eta_test": 0.89,
+   "eta": 0.8774752039482467,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.2,
+   "J": 2.8,
+   "eta_test": 0.885,
+   "eta": 0.8548474308839052,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.2,
+   "J": 3.0,
+   "eta_test": 0.868,
+   "eta": 0.8257714460049902,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.2,
+   "J": 3.2,
+   "eta_test": 0.85,
+   "eta": 0.7854740673346021,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.15,
+   "J": 1.6,
+   "eta_test": 0.875,
+   "eta": 0.8745650512236984,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.15,
+   "J": 2.2,
+   "eta_test": 0.895,
+   "eta": 0.8783697668069695,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.15,
+   "J": 2.7,
+   "eta_test": 0.88,
+   "eta": 0.8489893077483487,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.15,
+   "J": 3.0,
+   "eta_test": 0.86,
+   "eta": 0.7953068847214063,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.15,
+   "J": 3.3,
+   "eta_test": 0.815,
+   "eta": 0.7063969486890932,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.1,
+   "J": 1.6,
+   "eta_test": 0.9,
+   "eta": 0.8837561793152582,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.1,
+   "J": 2.2,
+   "eta_test": 0.893,
+   "eta": 0.8612025100313105,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.1,
+   "J": 2.5,
+   "eta_test": 0.876,
+   "eta": 0.8325949488546875,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.1,
+   "J": 2.8,
+   "eta_test": 0.85,
+   "eta": 0.7849437915321447,
+   "usable": true
+  },
+  {
+   "propeller": "NACA 10-(5)(08)-03R",
+   "CP": 0.1,
+   "J": 3.1,
+   "eta_test": 0.8,
+   "eta": 0.6806376993853915,
+   "usable": true
+  }
+ ]
+}

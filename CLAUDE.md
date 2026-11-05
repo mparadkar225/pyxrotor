@@ -315,6 +315,18 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   L51L28 at -2 deg). Where POWE converges, `solve_power` is POWE bit for bit. The P-47,
   YP-39 and YP-47M models use it; with it, every P-47 run but one has a solution with
   Mcrit + 0.15 (POWE with one restart left 14 unconverged).
+* `shank`: round (or oval) blade shanks. XROTOR's cubic drag law can't follow a cylinder
+  (TR-852 in flight: CD 0.51-0.58 to Mach 0.48, 1.09 at 0.70, 0.86 at 0.83), so the shank is
+  a no-lift, no-drag placeholder section (CDMIN 0, MCRIT 10, DCLDA = DCLDA_STALL = 0.01) and
+  its drag w * CD_cyl(M) * h/b is added with TPQ's own DTV/DPV formulas and CSCALC's W, CI,
+  SI. This is exact because CD doesn't enter APITER's residual; it matches TVIS/PVIS bit for
+  bit. w is the placeholder share of GETCLCDCM's section blend. At constant power,
+  `RoundShank.solve_power` iterates the blades' power target. YP-39: round to 0.25R and
+  faired by 0.30R gives the entire propeller within 0.035 (+0.11 without it), with the loss
+  growing 0.02 to 0.20 (test 0.02 to 0.24). RM L6L27a's shank difference matches within
+  0.7 points to tip Mach 0.72, but is too large above (oval drawn as a cylinder). TR-852's
+  16-040 fairing wants Mcrit = 0.85 - 1.2 t + 0.15 *without* the 0.5 floor. The floor stays
+  because removing it costs 0.06-0.11 on the P-47s (cuffed roots not modeled).
 * `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).
   Subtraction underflows within ~1e-8 of r = a and gave NaN.
 

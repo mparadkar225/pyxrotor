@@ -35,6 +35,7 @@ from pyxrotor import robust
 from pyxrotor import sections as sections_
 from pyxrotor.constants import PI
 from pyxrotor.rotor import Rotor
+from pyxrotor.shank import RoundShank
 
 HERE = Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location("naca747_model", HERE.parent / "naca747" / "model.py")
@@ -56,11 +57,17 @@ def density_from_altitude(h_ft: float) -> float:
     return 1.2250 * (1.0 - 2.25577e-5 * h) ** 4.2559
 
 
-def sections(mcrit_shift: float = 0.0):
+def sections(mcrit_shift: float | None = 0.0, shank: RoundShank | None = None):
+    """Clark Y sections at the Report 747 thicknesses; with a shank, round placeholder
+    sections at the hub and at shank.r_round, and Clark Y from shank.r_airfoil out."""
     out = []
     r = np.array(m747.GEO["r_over_R"])
     t = np.array(m747.GEO["h_over_b"])
-    for x in [HUB, 0.30, 0.35, 0.40, 0.45, 0.50, 0.60, 0.70, 0.80, 1.0]:
+    xs = [HUB, 0.30, 0.35, 0.40, 0.45, 0.50, 0.60, 0.70, 0.80, 1.0]
+    if shank is not None:
+        out = [shank.round_section(HUB), shank.round_section(shank.r_round)]
+        xs = [shank.r_airfoil] + [x for x in xs if x > shank.r_airfoil + 1e-9]
+    for x in xs:
         out.append(sections_.clark_y(float(np.interp(x, r, t)), float(x), mcrit_shift))
     return out
 
@@ -78,7 +85,11 @@ def blade(beta75: float):
     return rr, cc, beta75 + tt
 
 
-def run(row: dict, mcrit_shift: float = 0.0, mach_scale: float = 1.0, beta_guess: float = 45.0) -> dict:
+def run(row: dict, mcrit_shift: float | None = 0.0, mach_scale: float = 1.0,
+        beta_guess: float = 45.0, shank: tuple | None = None) -> dict:
+    """One flight run. shank=(r_round, r_airfoil) adds the round shanks' drag
+    (pyxrotor.shank, TR-852's cylinder): eta is then the entire propeller's efficiency and
+    eta_blades the airfoil part's thrust over the total power."""
     V = float(row["V_mph"]) * 0.44704
     M = float(row["M"])
     a = V / M
@@ -90,16 +101,22 @@ def run(row: dict, mcrit_shift: float = 0.0, mach_scale: float = 1.0, beta_guess
 
     r = Rotor(fix_all=True)
     r.s.rho, r.s.vso, r.s.rmu = rho, a / mach_scale, mu
-    r.set_sections(sections(mcrit_shift))
+    sh = RoundShank(*shank) if shank else None
+    r.set_sections(sections(mcrit_shift, sh))
     rr, cc, bb = blade(beta_guess)
     rr[0] = (rr[0] * R) / R
     r.arbi(nblds=3, vel=V, tip_radius=R, hub_radius=rr[0] * R, r_over_R=rr, c_over_R=cc,
            beta_deg=bb)
-    sol = robust.solve_power(r, power, RPM)
+    if sh is None:
+        sol = robust.solve_power(r, power, RPM)
+        eta_blades = sol.efficiency
+    else:
+        sol = sh.solve_power(r, power, RPM)
+        eta_blades = (sol.thrust - sh.drag(r)["thrust"]) * V / sol.power if sol.usable else math.nan
     ok, beta = sol.usable, sol.beta75_deg
     J = V / (n * D)
     return {"V_mph": float(row["V_mph"]), "converged": bool(ok), "method": sol.method,
-            "eta": sol.efficiency, "beta75": beta, "J": J, "CP": power / (rho * n ** 3 * D ** 5),
+            "eta": sol.efficiency, "eta_blades": eta_blades, "beta75": beta, "J": J, "CP": power / (rho * n ** 3 * D ** 5),
             "CT": sol.thrust / (rho * n * n * D ** 4),
             "Mt": M * mach_scale * math.sqrt(1.0 + (PI / J) ** 2), "rotor": r}
 

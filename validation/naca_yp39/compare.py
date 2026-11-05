@@ -17,6 +17,7 @@ _spec.loader.exec_module(model)
 SETTINGS = {"7.55": {}, "mcrit+0.10": {"mcrit_shift": 0.10}, "mcrit+0.15": {"mcrit_shift": 0.15},
             "mcrit+0.20": {"mcrit_shift": 0.20}, "incompressible": {"mach_scale": 0.01}}
 BANDS = [(0.94, 0.99), (0.99, 1.035), (1.035, 1.07)]
+SHANKS = [(0.25, 0.30), (0.27, 0.35), (0.30, 0.40)]   # (r_round, r_airfoil)
 
 
 def main():
@@ -38,6 +39,22 @@ def main():
         print(line)
     print("test entire propeller minus working part (shank drag):",
           " ".join(f"{r['eta_entire'] - r['eta_working']:+.3f}" for r in out))
+    # the round shanks (pyxrotor.shank): entire-propeller efficiency
+    print("\nwith the round-shank model, Mcrit + 0.15: model - test, entire propeller")
+    for shank in SHANKS:
+        name = f"shank {shank[0]:.2f}-{shank[1]:.2f}"
+        for r, row in zip(out, model.runs()):
+            o = model.run(row, mcrit_shift=0.15, shank=shank)
+            r[name] = {k: o[k] for k in ("converged", "method", "eta", "eta_blades", "beta75", "CT")}
+        line = f"{name:15s}"
+        for a, b in BANDS:
+            d = [r[name]["eta"] - r["eta_entire"] for r in out if a <= r["Mt"] < b]
+            line += f"  {a:.2f}-{b:.2f}: {np.mean(d):+.3f}"
+        print(line, " shank loss:", " ".join(f"{r[name]['eta'] - r[name]['eta_blades']:+.3f}"
+                                            for r in out))
+    nos = [r["mcrit+0.15"]["eta"] - r["eta_entire"] for r in out]
+    print(f"no shank model   mean {np.mean(nos):+.3f}")
+    (HERE / "results.json").write_text(json.dumps(out, indent=0))
 
 
 if __name__ == "__main__":

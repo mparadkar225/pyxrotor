@@ -1,0 +1,18 @@
+section,t,M,cd_on_thickness,source
+NACA 16-040,0.40,0.40,0.04,text (minimum about 0.04 up to M 0.50)
+NACA 16-040,0.40,0.50,0.04,text
+NACA 16-040,0.40,0.599,0.06,fig 16 trace
+NACA 16-040,0.40,0.633,0.10,fig 16 trace
+NACA 16-040,0.40,0.666,0.20,fig 16 trace
+NACA 16-040,0.40,0.686,0.30,fig 16 trace
+NACA 16-040,0.40,0.705,0.40,fig 16 trace
+NACA 16-040,0.40,0.723,0.50,fig 16 trace
+NACA 16-040,0.40,0.742,0.60,fig 16 trace
+NACA 16-040,0.40,0.762,0.70,fig 16 trace
+NACA 16-040,0.40,0.788,0.90,fig 16 trace
+NACA 16-025,0.25,0.50,0.02,text (minimum about 0.02 up to M 0.63)
+NACA 16-025,0.25,0.63,0.02,text
+NACA 16-025,0.25,0.748,0.06,fig 16 trace
+NACA 16-025,0.25,0.770,0.10,fig 16 trace
+NACA 16-025,0.25,0.792,0.15,fig 16 trace
+NACA 16-025,0.25,0.820,0.30,fig 16 trace
