@@ -1,0 +1,1 @@
+{"image": "19930086559/pages/p14-14.png", "overlay": "ov_l51_fig4.png", "out": "trk_l51_fig4.json", "curves": {"beta": {"seed": [1290, 1696], "xlo": 905, "xhi": 1265, "win": 5, "slope_n": 20}, "hb": {"seed": [1290, 2164], "xlo": 905, "xhi": 1850, "win": 5, "slope_n": 20}, "beta_out": {"seed": [1540, 1989], "xlo": 1255, "xhi": 1850, "win": 5, "slope_n": 20}}}

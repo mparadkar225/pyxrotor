@@ -107,3 +107,4 @@ Mean (model − test) efficiency by tip Mach, as [converged runs/runs]:
 - Thrust comes from wake surveys, uncorrected for slipstream rotation.
 - The airplane's spinner and cowl effects are part of the measurement and not of the model.
 - Next: the NACA RM E6-series P-47 reports, then sweep (scimitar) with NASA propfan data.
+- Static tests of thin 16-series blades (`validation/naca_l51l28`) want about +0.20.

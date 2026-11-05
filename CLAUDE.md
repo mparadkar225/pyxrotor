@@ -220,6 +220,13 @@ the I/O and the new models are Python; the compiled APITER/APINIT call back into
   large at 0.96–1.02 and 0.3–1.0 (or no solution) above 1.02, on all three; Mcrit + 0.15
   matches the measured losses up to tip Mach 1.17 within each propeller's low-speed bias
   (+0.03 to +0.06). Near the local-Mach cap some solves oscillate and never converge.
+  Static tests of thin 16-series two-blade propellers (NACA RM L51L28, `validation/naca_l51l28`,
+  `tests/measurement/test_l51l28_static.py`) want Mcrit + 0.20: compare power at the test's
+  *thrust* (the test's CT rises 23-52% with Mt at fixed blade angle, partly blade twist under
+  load, which XROTOR lacks). +0.15 overpredicts the rise where sections work far from their
+  design CL (XROTOR's 0.25|CL - CLDMIN| Mcrit penalty). At zero advance the model needs
+  14-42% too little power at 8-12 deg: the inner blade is stalled and XROTOR's post-stall
+  drag 2(excess angle)^2 is far too small.
 
 ## New models (beyond XROTOR)
 
