@@ -213,11 +213,13 @@ the I/O and the new models are Python; the compiled APITER/APINIT call back into
   `Rotor(fix_slipstream_splines=True)` (`State.fixes.slipstream_splines`).
 * **DESI fails** (GETALF inversion, NaN wake) when the helical tip Mach number reaches about 1.
 * The generic compressibility model (dCD = K (M − Mcrit)^3, local Mach capped at 0.99) is
-  very sensitive to Mcrit for transonic tips. Against P-47 flight data (Curtiss 714, NACA
-  WR L-177, `validation/naca_p47`, `tests/measurement/test_p47_compressibility.py`) the
-  Clark Y estimate Mcrit = 0.85 − 1.2 t gives losses from tip Mach 0.80 that are 0.09–0.15
-  too large at 0.92–1.0 and 0.3–0.4 (or no solution) above 1.02; Mcrit + 0.15 matches the
-  measured losses up to tip Mach 1.10, within the model's low-speed bias (+0.03).
+  very sensitive to Mcrit for transonic tips. Against P-47 flight data (three propellers:
+  Curtiss 714, Hamilton Standard 6507A-2, Curtiss 838; NACA WR L-177, WR L-594, RM L7D10;
+  `validation/naca_p47`, `tests/measurement/test_p47_compressibility.py`) the Clark Y
+  estimate Mcrit = 0.85 − 1.2 t gives losses from tip Mach ~0.85 that are 0.12–0.15 too
+  large at 0.96–1.02 and 0.3–1.0 (or no solution) above 1.02, on all three; Mcrit + 0.15
+  matches the measured losses up to tip Mach 1.17 within each propeller's low-speed bias
+  (+0.03 to +0.06). Near the local-Mach cap some solves oscillate and never converge.
 
 ## New models (beyond XROTOR)
 

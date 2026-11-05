@@ -1,5 +1,8 @@
-"""XROTOR's compressibility model against flight tests of a Curtiss No. 714-1C2-12 four-blade
-propeller on a Republic P-47C (NACA ACR L4L07 / WR L-177, Vogeley 1944; validation/naca_p47).
+"""XROTOR's compressibility model against Langley flight tests of three propellers on the
+Republic P-47 (validation/naca_p47): the Curtiss No. 714-1C2-12 four-blade (NACA ACR L4L07 /
+WR L-177, Vogeley 1944), the Hamilton Standard No. 6507A-2 three-blade (WR L-594, Gardner
+1945) and the Curtiss No. 838-1C2-18 three-blade with trailing-edge extensions (RM L7D10,
+Gardner 1947). The first tests below are the Curtiss 714's; test_all_three_* cover all.
 
 62 runs: climbs at tip Mach numbers 0.78-0.95 and high-speed runs at airplane Mach up to
 0.71, tip Mach up to 1.10. Each is modeled at the test's J, power coefficient, rpm, density
@@ -56,14 +59,19 @@ def band_errors(res):
     return np.array(means), failed
 
 
-@pytest.mark.parametrize("name", ["l177_table1.csv", "l177_table2.csv"])
+# Printed values that disagree with their own row (kept as printed; the model uses M).
+MISPRINTS = {("l7d10_table3.csv", "22-15"): "Mt 1.090, but M 0.618 and J 2.200 give 1.077"}
+
+
+@pytest.mark.parametrize("name", [t for prop in model.PROPS.values() for t in prop[1]])
 def test_tables_are_consistent(name):
     """eta = CT J / CP and Mt = M sqrt(1 + (pi/J)^2), to the tables' rounding (J has 2
-    decimals): catches transcription errors."""
+    decimals in L-177, 3 in the others): catches transcription errors."""
     for row in model.table(name):
         J, cp, ct, eta, M, mt = (float(row[k]) for k in ("J", "CP", "CT", "eta", "M", "Mt"))
         assert abs(ct * J / cp - eta) < 0.012, row["run"]
-        assert abs(M * math.sqrt(1.0 + (math.pi / J) ** 2) - mt) < 0.013, row["run"]
+        if (name, row["run"]) not in MISPRINTS:
+            assert abs(M * math.sqrt(1.0 + (math.pi / J) ** 2) - mt) < 0.013, row["run"]
 
 
 def test_low_tip_mach_matches(results):
@@ -96,3 +104,50 @@ def test_mcrit_shift_reproduces_the_losses(results):
     m, failed = band_errors(results["shift"])
     assert not any(failed), failed
     assert np.all((m > 0.0) & (m < 0.055)), m
+
+
+ALL_BANDS = [(0.80, 0.90), (0.90, 0.96), (0.96, 1.02), (1.02, 1.08), (1.08, 1.2)]
+
+
+@pytest.fixture(scope="module")
+def all_results():
+    out = {}
+    for prop in model.PROPS:
+        for name, kw in {"7.55": {}, "shift": {"mcrit_shift": 0.15}}.items():
+            res = []
+            for row in model.runs(prop):
+                m = model.run(row, **kw)
+                m["eta_test"], m["Mt_test"] = float(row["eta"]), float(row["Mt"])
+                res.append(m)
+            out[prop, name] = res
+    return out
+
+
+def _mean(res, a, b):
+    d = [r["eta"] - r["eta_test"] for r in res if a <= r["Mt_test"] < b and r["converged"]]
+    return float(np.mean(d)) if d else float("nan")
+
+
+@pytest.mark.parametrize("prop", list(model.PROPS))
+def test_all_three_755_overpredicts_losses(all_results, prop):
+    """For every propeller, 7.55's model with Mcrit = 0.85 - 1.2 t is 0.1 or more too low in
+    efficiency by tip Mach 0.96-1.02, and far worse above."""
+    res = all_results[prop, "7.55"]
+    assert _mean(res, 0.96, 1.02) < -0.10
+    assert _mean(res, 1.02, 1.2) < -0.25
+
+
+@pytest.mark.parametrize("prop", list(model.PROPS))
+def test_all_three_mcrit_shift_reproduces_the_losses(all_results, prop):
+    """For every propeller, with Mcrit + 0.15 the error at each tip Mach is the propeller's
+    own low-speed bias (its mean error below tip Mach 0.90) within +-0.04, up to tip Mach
+    1.17, and at least 85% of the runs converge (the rest stall in a limit cycle near the
+    local-Mach cap)."""
+    res = all_results[prop, "shift"]
+    bias = _mean(res, 0.0, 0.90)
+    assert 0.0 < bias < 0.07, bias
+    for a, b in ALL_BANDS:
+        m = _mean(res, a, b)
+        if not np.isnan(m):
+            assert abs(m - bias) < 0.04, (a, b, m, bias)
+    assert sum(r["converged"] for r in res) >= 0.85 * len(res)
