@@ -21,9 +21,13 @@ ranges they check are listed with each function.
     clcdcy(alphao, t, hm)               its CLCD, angle from zero lift
     cltmax(t, ncld)                     its design CL from t/c (or t/c from CL), ALPHLO
     bank16, bank4, bank_clark_y         the banks as cl_cd(alpha_deg, mach, re)
+    fit_section(cl_cd, ...)             XROTOR section parameters fitted to a bank
+    clark_y_section, naca16_section     drop-in for sections.clark_y / naca16, from the banks
 """
 from __future__ import annotations
 
+import dataclasses
+import functools
 import math
 from typing import NamedTuple
 
@@ -436,15 +440,18 @@ def bank4(tc, *, cld=None, z=None, fix_x8=False):
 
 
 def fit_section(cl_cd, xisect=0.0, *, mach=0.3, re=2.0e6, clmax, clmin, cmcon=-0.1,
-                mcrit_default=None, cl_window=0.4, alpha_window=(-2.0, 10.0)):
+                mcrit_default=None, alpha_window=(-2.0, 8.0), cl_window=0.35):
     """XROTOR AeroSection parameters fitted to a data bank `cl_cd(alpha_deg, mach, re)`:
 
       a0, dclda   the lift line at `mach`, with XROTOR's Prandtl-Glauert factor taken out
                   (dclda per rad, incompressible);
-      cdmin, cldmin, dcdcl2   CD's minimum over the angles alpha_window (deg from zero
-                  lift; the Clark Y tables cover -2 to 11 deg and its drag dips outside them) and
-                  a least-squares fit of
-                  CD - CDMIN = DCDCL2 (CL - CLDMIN)^2 within cl_window of it;
+      cdmin, cldmin, dcdcl2   a least-squares parabola CD = CDMIN + DCDCL2 (CL - CLDMIN)^2
+                  through the bank's drag within cl_window of its lowest point over the
+                  angles alpha_window (deg from zero lift, CL about -0.2 to 0.85). The banks'
+                  drag is
+                  not a parabola (the Clark Y thick tables are coarse steps, and its drag
+                  dips where the tables extrapolate past ALPHAO 9-11 deg), so the fit, not
+                  the raw minimum, is what XROTOR's law can follow;
       reref, rexp the fit's Re, and the exponent from CD(CLDMIN) at 2 re;
       mcrit       the Mach number where CD at CLDMIN (at constant Re) has risen 0.002,
                   which is where XROTOR's drag rise CDC = 10 (M - Mcrit_eff)^3 equals 0.002
@@ -470,10 +477,24 @@ def fit_section(cl_cd, xisect=0.0, *, mach=0.3, re=2.0e6, clmax, clmin, cmcon=-0
     grid = _frange(alpha_zero + alpha_window[0], alpha_zero + alpha_window[1], 0.05)
     cls = [cl_cd(a, mach, re)[0] for a in grid]
     cds = [cl_cd(a, mach, re)[1] for a in grid]
-    i = min(range(len(cds)), key=cds.__getitem__)
-    cldmin, cdmin = cls[i], cds[i]
-    pts = [(cl - cldmin, cd - cdmin) for cl, cd in zip(cls, cds) if abs(cl - cldmin) <= cl_window]
-    dcdcl2 = sum(d * d * e for d, e in pts) / sum(d ** 4 for d, _ in pts)
+    # least-squares CD = p0 + p1 CL + p2 CL^2 near the lowest drag, sums in order
+    low = min(cds)                          # centre: the middle of the lowest (flat) part
+    flat = [c for c, d in zip(cls, cds) if d <= low + 1e-6]
+    centre = 0.5 * (flat[0] + flat[-1])
+    pts = [(c, d) for c, d in zip(cls, cds) if abs(c - centre) <= cl_window]
+    cls, cds = [c for c, _ in pts], [d for _, d in pts]
+    n = len(cls)
+    sx = [sum(c ** k for c in cls) for k in range(5)]
+    sy = [sum(d * c ** k for c, d in zip(cls, cds)) for k in range(3)]
+    m3 = [[sx[i + j] for j in range(3)] for i in range(3)]
+    p0, p1, p2 = _solve3(m3, sy)
+    if p2 > 0.0:
+        cldmin = -p1 / (2.0 * p2)
+        cdmin = p0 + p1 * cldmin + p2 * cldmin * cldmin
+        dcdcl2 = p2
+    else:                                   # no curvature: flat at the window's minimum
+        i = min(range(n), key=cds.__getitem__)
+        cldmin, cdmin, dcdcl2 = cls[i], cds[i], 0.0
 
     def cd_at(m, r=re):
         return cl_cd(alpha_at(cldmin, m), m, r)[1]
@@ -495,6 +516,20 @@ def fit_section(cl_cd, xisect=0.0, *, mach=0.3, re=2.0e6, clmax, clmin, cmcon=-0
                        dclda=slope / deg * beta, dclda_stall=0.1, dcl_stall=0.1, cdmin=cdmin,
                        cldmin=cldmin, dcdcl2=dcdcl2, cmcon=cmcon, reref=re, rexp=rexp,
                        mcrit=mcrit if mcrit is not None else 0.8)
+
+
+def _solve3(m, y):
+    """3x3 linear solve by Cramer's rule."""
+    def det(a):
+        return (a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+                - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+                + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]))
+    d = det(m)
+    out = []
+    for k in range(3):
+        mk = [[y[i] if j == k else m[i][j] for j in range(3)] for i in range(3)]
+        out.append(det(mk) / d)
+    return out
 
 
 def _frange(a, b, step):
@@ -1140,3 +1175,55 @@ def bank_clark_y(tc, *, cld=None):
         c = clcdcy(float(alpha_deg) - d.alphlo, d.t, mach)
         return c.cl, c.cd
     return cl_cd
+
+
+# ----------------------------------------------------------------------------- bank sections
+# Drop-in replacements for pyxrotor.sections.clark_y / naca16 (same arguments): XROTOR
+# sections fitted to the banks (fit_section at Mach 0.3, Re 2e6). The banks have no stall
+# or moment, so CLMAX, CLMIN and CMCON are pyxrotor.sections' estimates. mcrit_shift is
+# added to the bank's MCRIT (None counts as 0: the calibrated rule belongs to the estimates).
+CLARK_Y_T_MAX = 0.35     # the Clark Y tables' thickest section
+NACA16_T_MAX = 0.40      # the 16-series drag-divergence table's
+NACA16_CLD_MIN = 0.2     # the 16-series camber-drag fit's lowest design CL (CLIT(1))
+
+
+@functools.lru_cache(maxsize=None)
+def _fit_clark_y(t):
+    return fit_section(bank_clark_y(t), clmax=1.3, clmin=-0.5)
+
+
+@functools.lru_cache(maxsize=None)
+def _fit_naca16(t, cld, x):
+    return fit_section(bank16(t, cld, x=x), clmax=1.0, clmin=-1.0)
+
+
+def clark_y_section(t, xisect, mcrit_shift=0.0):
+    """Clark Y section from the CR-176883 bank. Above CLARK_Y_T_MAX (shanks) the
+    sections.clark_y estimate with its plain Mcrit + mcrit_shift. Re is not in the bank:
+    REREF and REXP are the estimate's."""
+    from . import sections
+    t, shift = float(t), float(mcrit_shift or 0.0)
+    est = sections.clark_y(t, xisect, mcrit_shift=shift)
+    if t > CLARK_Y_T_MAX:
+        return est
+    f = _fit_clark_y(t)
+    return dataclasses.replace(est, a0=f.a0, dclda=f.dclda, cdmin=f.cdmin, cldmin=f.cldmin,
+                               dcdcl2=f.dcdcl2, mcrit=f.mcrit + shift)
+
+
+def naca16_section(t, xisect, cld, mcrit_shift=0.0):
+    """NACA 16-series section from the CR-176883 bank, its laminar fraction at r/R = xisect.
+    Below NACA16_CLD_MIN the bank's camber drag extrapolates (it rises with Mach at CLD 0 as
+    if supercritical by Mach 0.45), so the drag terms come from CLD 0.2 and only the zero-lift
+    angle and CLDMIN follow cld. Above NACA16_T_MAX the sections.naca16 estimate."""
+    from . import sections
+    t, cld, shift = float(t), float(cld), float(mcrit_shift or 0.0)
+    est = sections.naca16(t, xisect, cld, mcrit_shift=shift)
+    if t > NACA16_T_MAX:
+        return est
+    c = max(cld, NACA16_CLD_MIN)
+    f = _fit_naca16(t, c, min(max(float(xisect), 0.0), 1.0))
+    a0 = f.a0 if c == cld else naca16_alpha0(t, cld) * math.pi / 180.0
+    return dataclasses.replace(est, a0=a0, dclda=f.dclda, cdmin=f.cdmin,
+                               cldmin=f.cldmin - c + cld, dcdcl2=f.dcdcl2, reref=f.reref,
+                               rexp=f.rexp, mcrit=f.mcrit + shift)

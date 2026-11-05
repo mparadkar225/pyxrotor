@@ -49,15 +49,15 @@ camber above 0.04; 16-series: supersonic and t/c > 0.25). Those were checked by 
 `databank.fit_section` fits XROTOR's section parameters to a bank at Mach 0.3, Re 2e6
 (`tests/model/test_databank_sample.py` records these):
 
-| | 16-series (t 4-9%) | Clark Y (t 6-12%) |
+| | 16-series (t 3-10%, CLD 0.2-0.7) | Clark Y (t 4-12%) |
 |---|---|---|
-| Mcrit (CD rise 0.002 at CLDMIN) vs 0.85 - 1.2 t | +0.02 to +0.08 | -0.02 to +0.08 |
+| Mcrit (CD rise 0.002 at CLDMIN) vs 0.85 - 1.2 t | -0.08 to +0.05 | -0.01 to +0.07 |
 | DCDCL2 vs the estimates' 0.007 | ~0.06 (8x) | 0.006-0.008 |
-| CDMIN vs the estimates | 15-50% lower | within 0.001, CL at minimum 0.19 (est. 0.35) |
+| CDMIN vs the estimates | up to 45% lower | within 0.001; CL at minimum 0.21-0.23 (est. 0.35) |
 
-So the calibrated +0.15/+0.20 in `pyxrotor.sections` is not a section property: the 2-D data
-put the drag rise near the thickness estimate, and the propeller tests want much more
-(tip relief, the cubic drag law's shape, the compressible stall limit).
+The propeller comparisons rerun with bank sections (`validation/cr176883_sections`) still
+need a calibrated shift about as large as the estimates': the +0.15/+0.20 of
+`pyxrotor.sections` is a propeller-level correction, not a section property.
 
 ## Listing oddities (kept as printed)
 - **4-digit CDL, X8.** The continuation line reads `01,.2,.3,.4,.5` with the `0` in column 6.

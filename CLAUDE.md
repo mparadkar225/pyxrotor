@@ -334,12 +334,21 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   digit (`tests/model/test_databank_sample.py`), which checks the transcription. Integer powers
   follow gfortran -O1's chains (`databank._powi`). The 4-digit X8(13) reads 1. as compiled
   (`fix_x8` gives .1). `fit_section` fits XROTOR's section parameters to a bank (MCRIT where
-  CD at CLDMIN has risen 0.002). On the 16-series it puts Mcrit only 0.02-0.08 above the
-  plain thickness estimate (the calibrated +0.15/0.20 is a propeller-level correction), its
-  drag due to lift is ~8x `sections.naca16`'s DCDCL2 and its CDMIN 15-50% lower. The Clark Y
-  bank (R&M 2036 data) agrees with `sections.clark_y` on CDMIN and DCDCL2 and also puts Mcrit
-  within -0.02/+0.08 of the plain estimate (minimum drag at CL 0.19, not 0.35). Fit inside
-  ALPHAO -2 to 11 deg: the Clark Y drag dips where its tables extrapolate. Clark Y ignores Re.
+  CD at CLDMIN has risen 0.002; a parabola within 0.35 of the lowest drag, as the banks'
+  drag isn't quadratic). The 16-series bank puts Mcrit -0.08/+0.05 around the plain thickness
+  estimate (wiggling with CLD: a 6-point polynomial fit), its drag due to lift is ~8x
+  `sections.naca16`'s DCDCL2 and its CDMIN up to 45% lower; its camber drag extrapolates
+  below CLD 0.2 (supercritical-like rise by Mach 0.45 at CLD 0). The Clark Y bank (R&M 2036)
+  agrees with `sections.clark_y` on CDMIN and DCDCL2, Mcrit -0.01/+0.07, minimum drag at CL
+  0.21-0.23. Its thick tables are coarse steps, and its drag dips where the tables
+  extrapolate (ALPHAO < -2 or > 9-11 deg). Clark Y ignores Re.
+  `clark_y_section`/`naca16_section` are drop-in replacements for `sections.clark_y/naca16`.
+  Rerunning every transonic comparison with them (`validation/cr176883_sections`,
+  `tests/measurement/test_bank_sections.py`): the banks don't remove the calibration. Alone
+  they lose about as much as 7.55's estimate (16-series: more), and they need a shift as
+  large: Clark Y + 0.10-0.20, 16-series + 0.15-0.25. So the calibrated shift is a
+  propeller-level correction (tip relief, the cubic drag law, the compressible stall
+  limit), not a section-estimate error. The 16-series bank raises L51L28 static power 6-14%.
   OUT's interval search loops forever on NaN (Fortran too), so test with finite inputs.
 * `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).
   Subtraction underflows within ~1e-8 of r = a and gave NaN.
