@@ -95,15 +95,17 @@ class StationAero(NamedTuple):
     cm_w: float
 
 
-def clcdcm(alf: float, w: float, rey: float, vel: float, vso: float, sec: AeroSection) -> SectionAero:
+def clcdcm(alf: float, w: float, rey: float, vel: float, vso: float, sec: AeroSection,
+           mlift: float = 0.0) -> SectionAero:
     """Port of SUBROUTINE CLCDCM: CL(alpha), CD(alpha), CM for one section parameter set.
 
     alf  angle of attack (rad)       w    local speed / VEL       rey  local Reynolds number
     vel  flight speed (COMMON VEL)   vso  speed of sound (COMMON VSO)
-    rey <= 0 disables Reynolds-number scaling of CD.
+    rey <= 0 disables Reynolds-number scaling of CD. mlift > 0 adds pyxrotor.transonic's
+    lift loss past the lift-divergence Mach number (not XROTOR; 0 is CLCDCM).
     """
     return SectionAero(*_speedups.clcdcm(float(alf), float(w), float(rey), float(vel),
-                                         float(vso), sec))
+                                         float(vso), sec, float(mlift)))
 
 
 def setiaero(xi: Sequence[float], sections: Sequence[AeroSection]) -> np.ndarray:

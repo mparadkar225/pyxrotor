@@ -53,7 +53,10 @@ class State:
     Attributes that are not COMMON: fixes (Fixes, the bug-fix options), cldes_linear
     ((root, tip) of the last SETCLD, used by Fixes.linear_cl; None after LOAD), and the
     swept-blade model (pyxrotor.sweep, not XROTOR): sweep (a Sweep, or None for XROTOR's
-    straight blade) and sweep_cos (cos of each station's effective sweep, set by CSCALC)."""
+    straight blade), sweep_cos (cos of each station's effective sweep, set by CSCALC) and
+    sweep_induction (VRTXCO models the swept blade's own induction);
+    the transonic lift loss (pyxrotor.transonic): mlift (each aero section's lift-divergence
+    Mach number, length NAX, or None for XROTOR's Prandtl-Glauert lift)."""
 
     #: Fortran variable name -> COMMON block name
     BLOCK_OF = {name: blk for blk, vs in BLOCKS.items() for name, _, _ in vs}
@@ -74,6 +77,8 @@ class State:
         self.fixes = Fixes()
         self.cldes_linear: tuple[float, float] | None = None
         self.sweep = None
+        self.sweep_induction = False
+        self.mlift = None
         self.sweep_cos = np.ones(self.xi.size) if hasattr(self, "xi") else np.ones(1)
 
     def copy(self) -> "State":

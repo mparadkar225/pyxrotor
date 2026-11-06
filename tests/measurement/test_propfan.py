@@ -147,3 +147,25 @@ def test_sr3_core_sweep_moves_both_discrepancies_part_way():
         out[name] = (b - 60.5, c85 / c70)
     assert -5.0 < out["core"][0] < -4.0 and out["straight"][0] < -5.5
     assert 1.05 < out["core"][1] < 1.15 and out["straight"][1] > 1.18
+
+
+def test_sr3_curved_blade_induction_and_lift_loss():
+    """Stage 3 of the sweep model on SR-3 (fixed pitch, J 3.1): the curved blade's own
+    induction (sweep="core-ind") lowers the blade angle at the test's CP by 0.75 deg (the
+    swept-back tip is loaded by upwash), widening the deficit to 5.3 deg. Hamilton Standard's
+    sweep-aware lifting lines were 4-5 deg low too. The fixed-pitch power still rises with
+    Mach number (+5-11% at 0.85). The transonic lift loss (lift_loss=0.10) barely acts on the
+    swept blade, whose normal Mach numbers stay low. On the straight blade it drives the
+    power down far past the test (CP at Mach 0.85 below 0.1 of Mach 0.70's, test 0.75),
+    through the thick inboard sections. Neither model explains SR-3's trend; blade
+    deflection under load (not modeled) remains."""
+    def trend(**kw):
+        b = model.run("SR-3", 0.70, 3.1, cp=1.64, **kw)["beta75"]
+        cp = {M: model.run("SR-3", M, 3.1, beta75=b, **kw)["CP"] for M in (0.70, 0.85)}
+        return b - 60.5, cp[0.85] / cp[0.70]
+    db, ratio = trend(sweep="core-ind", mcrit_shift=0.10)
+    assert -5.6 < db < -5.0 and 1.05 < ratio < 1.15
+    db_ll, ratio_ll = trend(sweep="core-ind", mcrit_shift=0.10, lift_loss=0.10)
+    assert abs(db_ll - db) < 0.2 and ratio_ll > 1.05
+    _, straight_ll = trend(mcrit_shift=0.15, lift_loss=0.15)
+    assert straight_ll < 0.1

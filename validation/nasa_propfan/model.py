@@ -31,6 +31,11 @@ Model choices (each is an option to run with and without):
     local flow at every iteration, sections evaluated in the normal plane (normal Mach number
     and angle, CL cos^2, pressure drag cos^3). The airfoil thickness is taken as the normal
     section's, t/b / cos(sweep).
+  * sweep="core-ind": the same, and the curved blade's own induction (pyxrotor.sweep.vrtxco:
+    XROTOR's discrete vortex wake from the swept quarter-chord points plus the curved bound
+    vortex); this uses the vortex formulation.
+  * lift_loss=shift: the transonic lift loss (pyxrotor.transonic), each section's
+    lift-divergence Mach number transonic.mlift(t) + shift (t as the sections use it).
   * nacelle=True: XROTOR's body velocity UBODY = M_local/M0 - 1 from the potential-flow
     axial Mach number about the 0.35 D nacelle at M0 = 0.8 (TM X-73612 fig. 11), the same
     fraction at every Mach number.
@@ -51,6 +56,7 @@ from pathlib import Path
 import numpy as np
 
 from pyxrotor.constants import PI
+from pyxrotor import transonic
 from pyxrotor.sweep import Sweep
 from pyxrotor.sections import naca16
 from pyxrotor.rotor import Rotor
@@ -71,16 +77,30 @@ def true_diameter(prop: str, beta75: float) -> float:
     return DREF * float(np.interp(beta75, t["beta75_deg"], t["D_over_Dref"]))
 
 
+SECTION_X = (None, 0.28, 0.32, 0.36, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80,
+             0.85, 0.90, 0.95, 1.0)
+
+
+def section_geometry(prop: str, sweep: str | None = None):
+    """(r/R, t/c, design CL) of each aero section; with the core sweep model the t/c of the
+    airfoil normal to the swept line, t/b / cos(sweep)."""
+    g = GEO[prop]
+    r = np.array(g["r_over_R"])
+    out = []
+    for x in [r[0], *SECTION_X[1:]]:
+        t = float(np.interp(x, r, g["h_over_b"]))
+        cld = float(np.interp(x, r, g["design_cl"]))
+        if sweep in ("core", "core-ind"):
+            t = t / math.cos(math.radians(float(np.interp(x, r, g["sweep_deg"]))))
+        out.append((float(x), t, cld))
+    return out
+
+
 def sections(prop: str, mcrit_shift: float = 0.0, sweep: str | None = None):
     g = GEO[prop]
     r = np.array(g["r_over_R"])
     out = []
-    for x in [r[0], 0.28, 0.32, 0.36, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80,
-              0.85, 0.90, 0.95, 1.0]:
-        t = float(np.interp(x, r, g["h_over_b"]))
-        cld = float(np.interp(x, r, g["design_cl"]))
-        if sweep == "core":                      # the airfoil normal to the swept line
-            t = t / math.cos(math.radians(float(np.interp(x, r, g["sweep_deg"]))))
+    for x, t, cld in section_geometry(prop, sweep):
         s = section16(t, float(x), cld, mcrit_shift)
         if sweep in ("mcrit", "cosine"):
             lam = math.radians(float(np.interp(x, r, g["sweep_deg"])))
@@ -138,7 +158,8 @@ def air(M: float):
     return a, rho, mu
 
 
-def _solve(prop, M, J, cp, beta, mcrit_shift, sweep, nacelle, mach_scale, nitera=40):
+def _solve(prop, M, J, cp, beta, mcrit_shift, sweep, nacelle, mach_scale, nitera=40,
+           lift_loss=None):
     """One XROTOR solve at blade angle beta (fixed pitch) or from beta (POWE)."""
     a, rho, mu = air(M)
     vel = M * a
@@ -149,12 +170,15 @@ def _solve(prop, M, J, cp, beta, mcrit_shift, sweep, nacelle, mach_scale, nitera
     r = Rotor(fix_all=True)
     r.s.rho, r.s.vso, r.s.rmu = rho, a / mach_scale, mu
     r.set_sections(sections(prop, mcrit_shift, sweep))
+    if lift_loss is not None:
+        r.set_transonic_lift([transonic.mlift(t, lift_loss)
+                              for _, t, _ in section_geometry(prop, sweep)])
     rr, cc, bb = blade(prop, beta)
     rr[0] = (rr[0] * R) / R                         # ARBI's XI0 = (hub R)/R, to the ulp
     r.arbi(nblds=g["nblds"], vel=vel, tip_radius=R, hub_radius=rr[0] * R,
            r_over_R=rr, c_over_R=cc, beta_deg=bb)
-    if sweep == "core":
-        r.set_sweep(blade_sweep(prop))
+    if sweep in ("core", "core-ind"):
+        r.set_sweep(blade_sweep(prop), induction=sweep == "core-ind")
     if nacelle:
         nac = GEO["nacelle_local_axial_mach_M0_0.8"]
         r.s.ubody[:r.s.ii] = np.interp(r.s.xi[:r.s.ii], nac["r_over_R"], nac["M_local"]) / 0.8 - 1.0
@@ -198,7 +222,8 @@ def _solve(prop, M, J, cp, beta, mcrit_shift, sweep, nacelle, mach_scale, nitera
 
 def run(prop: str, M: float, J: float, cp: float | None = None, beta75: float | None = None,
         mcrit_shift: float = 0.0, sweep: str | None = None, nacelle: bool = True,
-        mach_scale: float = 1.0, scan: tuple = (-7.0, 5.0, 0.5)) -> dict:
+        mach_scale: float = 1.0, scan: tuple = (-7.0, 5.0, 0.5),
+        lift_loss: float | None = None) -> dict:
     """One point; J and cp on the reference diameter. mach_scale scales the Mach number by
     changing the speed of sound (V, n, J kept): mach_scale = 0.01 is no compressibility.
 
@@ -208,17 +233,18 @@ def run(prop: str, M: float, J: float, cp: float | None = None, beta75: float | 
     and CP, CT, efficiency and blade angle interpolated linearly at the target CP between the
     two usable solutions that bracket it. "bracket" is their spacing in degrees."""
     args = (mcrit_shift, sweep, nacelle)
+    kw = {"lift_loss": lift_loss}
     if cp is None:
-        return _solve(prop, M, J, None, beta75, *args, mach_scale)
+        return _solve(prop, M, J, None, beta75, *args, mach_scale, **kw)
     # the blade angle without compressibility: XROTOR's POWE converges there
-    ref = _solve(prop, M, J, cp, 58.0, mcrit_shift, sweep, nacelle, 0.01)
+    ref = _solve(prop, M, J, cp, 58.0, mcrit_shift, sweep, nacelle, 0.01, **kw)
     if mach_scale <= 0.05:
         ref["bracket"] = 0.0
         return ref
     b0 = ref["beta75"]
     pts = []
     for db in np.arange(scan[0], scan[1] + 1e-9, scan[2]):
-        o = _solve(prop, M, J, None, b0 + db, *args, mach_scale)
+        o = _solve(prop, M, J, None, b0 + db, *args, mach_scale, **kw)
         if o["usable"]:
             pts.append(o)
     out = {"prop": prop, "M": M, "J": J, "usable": False, "converged": False, "bracket": None,

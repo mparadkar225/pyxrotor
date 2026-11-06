@@ -41,7 +41,7 @@ def rotol_like(nblds=3):
 
 def test_zero_offsets_are_straight():
     a, b = rotol_like(), rotol_like()
-    b.set_sweep(Sweep([0.2, 1.0], [0.0, 0.0]))
+    b.set_sweep(Sweep([0.2, 1.0], [0.0, 0.0]), induction=False)
     assert a.solve_rpm(1800.0) and b.solve_rpm(1800.0)
     pa, pb = a.performance(), b.performance()
     for k in ("thrust", "power", "efficiency"):
@@ -86,7 +86,7 @@ def _beta_spline(s, x):
 def test_effective_sweep_geometry():
     r = rotol_like()
     xi = np.linspace(0.2, 1.0, 9)
-    r.set_sweep(Sweep(xi, s=0.3 * (xi - 0.5) ** 2 - 0.02, n=0.05 * (xi - 0.2)))
+    r.set_sweep(Sweep(xi, s=0.3 * (xi - 0.5) ** 2 - 0.02, n=0.05 * (xi - 0.2)), induction=False)
     assert r.solve_rpm(1800.0)
     for i in range(1, r.s.ii - 1):
         want = _cartesian_sweep(r, i)
@@ -155,7 +155,7 @@ def test_lift_slope_cos():
 def test_converged_swept_solution_is_consistent():
     r = rotol_like()
     xi = np.linspace(0.2, 1.0, 9)
-    r.set_sweep(Sweep.from_angle(xi, np.clip(60.0 * (xi - 0.45), -10.0, 40.0)))
+    r.set_sweep(Sweep.from_angle(xi, np.clip(60.0 * (xi - 0.45), -10.0, 40.0)), induction=False)
     assert r.solve_rpm(1800.0)
     s = r.s
     for i in range(s.ii):
@@ -176,7 +176,8 @@ def test_sweep_needs_more_blade_angle():
         r = rotol_like()
         if lam:
             xi = np.linspace(0.2, 1.0, 9)
-            r.set_sweep(Sweep.from_angle(xi, np.where(xi > 0.5, (xi - 0.5) / 0.5 * lam, 0.0)))
+            r.set_sweep(Sweep.from_angle(xi, np.where(xi > 0.5, (xi - 0.5) / 0.5 * lam, 0.0)),
+                        induction=False)
         assert r.solve_power(600e3, fix="rpm", rpm=1800.0)
         out.append(float(np.interp(0.75, r.s.xi[: r.s.ii], r.s.beta[: r.s.ii])))
     assert out[1] > out[0] + math.radians(0.3)
@@ -188,3 +189,92 @@ def test_design_refuses_sweep():
     with pytest.raises(NotImplementedError):
         r.design(nblds=3, tip_radius=1.7, hub_radius=0.34, vel=120.0, rpm=1800.0,
                  power=600e3, cl=0.5)
+
+
+# ------------------------------------------------------------- swept-blade induction
+def _coefficients(r, sweep):
+    from pyxrotor import induced
+    s = r.s
+    s.sweep, s.sweep_induction = sweep, sweep is not None
+    induced.vrtxco(s)
+    out = (s.vind_gam[:, : s.ii, : s.ii].copy(), s.vind_adw[:, : s.ii].copy())
+    s.sweep, s.sweep_induction = None, False
+    return out
+
+
+def _exact_nodes(r):
+    """Radii where the swept VRTXCO evaluates the line (stations and leg points), and the
+    blade angle there: a Sweep with these nodes reproduces offsets exactly at them."""
+    from pyxrotor.numerics import seval, spline
+    s = r.s
+    xs = np.array(s.xi[: s.ii])
+    be = np.array(s.beta[: s.ii])
+    bs = spline(be, xs, s.ii)
+    xi = np.unique(np.concatenate([xs, np.array(s.xv[: s.ii + 1])]))
+    return xi, np.array([seval(x, be, bs, xs, s.ii) for x in xi])
+
+
+@pytest.fixture(scope="module")
+def vortex_rotor():
+    r = rotol_like()
+    r.design_formulation("vrtx")
+    assert r.solve_rpm(1800.0)
+    return r
+
+
+def test_induction_zero_sweep_is_vrtxco(vortex_rotor):
+    g0, a0 = _coefficients(vortex_rotor, None)
+    g, a = _coefficients(vortex_rotor, Sweep([0.1, 1.0], [0.0, 0.0]))
+    assert np.max(np.abs(g - g0)) < 1e-13 * np.max(np.abs(g0))
+    assert np.max(np.abs(a - a0)) < 1e-12 * np.max(np.abs(a0))
+
+
+@pytest.mark.parametrize("kind", ["rotation", "axial shift"])
+def test_induction_is_invariant_under_rigid_motions(vortex_rotor, kind):
+    """A blade turned rigidly about the axis, or moved along it (with its wake), is the same
+    rotor: the curved-blade VRTXCO must give XROTOR's coefficients, although its legs, bound
+    segments and control points all moved."""
+    xi, b = _exact_nodes(vortex_rotor)
+    if kind == "rotation":
+        sw = Sweep(xi, 0.3 * xi * np.cos(b), -0.3 * xi * np.sin(b))      # y = 0.3 r, z = 0
+    else:
+        sw = Sweep(xi, 0.2 * np.sin(b), 0.2 * np.cos(b))                 # y = 0, z = 0.2
+    g0, a0 = _coefficients(vortex_rotor, None)
+    g, a = _coefficients(vortex_rotor, sw)
+    assert np.max(np.abs(g - g0)) < 1e-12 * np.max(np.abs(g0))
+    assert np.max(np.abs(a - a0)) < 1e-11 * np.max(np.abs(a0))
+
+
+def _swept_blade_angle(ii, core, induction=True):
+    r = rotol_like()
+    r.s.ii = ii
+    xi = np.linspace(0.2, 1.0, 12)
+    r.arbi(nblds=3, vel=120.0, tip_radius=1.7, hub_radius=0.2 * 1.7, r_over_R=xi,
+           c_over_R=0.12 + 0.05 * np.sin(PI * xi), beta_deg=60.0 - 40.0 * (xi - 0.2))
+    r.design_formulation("vrtx")
+    sw = Sweep.from_angle(np.linspace(0.2, 1.0, 9), [-10, -5, 0, 8, 16, 24, 32, 40, 45])
+    sw.core = core
+    r.set_sweep(sw, induction=induction)
+    from pyxrotor import robust
+    sol = robust.solve_power(r, 600e3, 1800.0)
+    return sol.beta75_deg if sol.exact else None
+
+
+def test_induction_converges_with_stations():
+    """With the chord-sized core the curved bound vortex's effect converges as the stations
+    are refined (within 0.06 deg from 20 to 50 stations). Without it, the self-induction of
+    a curved line grows with refinement (logarithmically): its offset from the cored result
+    grows from 0.25 to 0.33 deg between 20 and 50 stations."""
+    b = [_swept_blade_angle(n, 0.25) for n in (20, 30, 50)]
+    assert None not in b and max(b) - min(b) < 0.06
+    b0 = [_swept_blade_angle(n, 0.0) for n in (20, 50)]
+    assert b0[1] - b[2] > b0[0] - b[0] + 0.05
+
+
+def test_induction_of_swept_back_tip():
+    """Sweeping the outer blade back loads it more (the inner blade's bound vortex and the
+    swept wake induce upwash there), so at the same power the swept blade with its
+    induction needs less blade angle than sweep in the sections alone."""
+    sections_only = _swept_blade_angle(30, 0.25, induction=False)
+    full = _swept_blade_angle(30, 0.25)
+    assert full < sections_only

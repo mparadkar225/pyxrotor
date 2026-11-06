@@ -134,6 +134,21 @@ XROTOR is a straight lifting line with 2-D sections, so it has no sweep. Two que
     The rest needs the induction of the swept lifting line (a curved bound vortex, the wake
     leaving from swept and raked positions) and a transonic lift loss.
 
+- **The curved blade's own induction** (`sweep="core-ind"`: the wake leaves from the swept
+  quarter-chord points, and the curved bound vortex induces on the blade) lowers the blade
+  angle at the test's CP by a further 0.75° (−5.3° in all). The swept-back tip is loaded by
+  upwash. It raises the design-point efficiency by 0.025 (+0.011 to +0.027 against the test,
+  Mach 0.6–0.85). The fixed-pitch CP from Mach 0.70 to 0.85 still rises, +10.5%.
+- **The transonic lift loss** (`lift_loss=shift`, `pyxrotor.transonic`) barely acts on the
+  swept blade (CP +10–14%), because its normal Mach numbers stay below the lift divergence.
+  On the straight blade it drives the power at Mach 0.85 to near zero through the thick
+  inboard sections (test: −25%).
+- **So neither the swept lifting line nor a lift loss explains SR-3's falling power.** What
+  remains is blade deflection under load, which is not modeled: the blade untwists as the
+  dynamic pressure rises with tunnel Mach number, and its diameter already changes with blade
+  angle in `geometry.json`. Lifting-surface (chordwise) effects on these wide, very swept
+  blades are the other candidate.
+
 `tests/measurement/test_propfan.py` pins these findings.
 
 ## Limits

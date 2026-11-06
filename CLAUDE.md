@@ -368,8 +368,31 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   effective sweep is the published one): with Mcrit + 0.10 every design-point solve
   converges and efficiency follows within 0.02 to Mach 0.85; the blade-angle deficit drops
   from 6 to 4.5 deg and the fixed-pitch CP rise from Mach 0.70 to 0.85 from +22% to +10%
-  (test: -25%). The rest needs stage 3: the swept lifting line's induction (curved bound
-  vortex, wake from swept/raked positions; extend VRTXCO) and a transonic lift loss.
+  (test: -25%).
+  Stage 3, induction (`set_sweep(..., induction=True)`, the default; it selects VRTX):
+  `sweep.vrtxco` is XROTOR's discrete wake with each leg leaving from its swept/raked point
+  plus blade 1's curved bound vortex (straight segments between the XV points; others'
+  bound vortices left out as in XROTOR), control points on each panel's bound segment.
+  Exact limits: zero offsets = VRTXCO to 1e-15; a rigidly rotated or axially shifted blade
+  gives VRTXCO's coefficients (1e-13), but only with Sweep nodes at the evaluation radii:
+  spline noise of 1e-4 R at the tiny tip panels kinks the line and changes them by 20%. The
+  curved line's self-induction diverges logarithmically with refinement, so the bound
+  induction is smoothed by h^2/(h^2 + (core c)^2), core 0.25: converged within 0.05 deg from
+  16 to 60 stations. On SR-3 it lowers the blade angle 0.75 deg (swept-back tip upwash): the
+  deficit is 5.3 deg, as Hamilton Standard's sweep-aware lifting lines were 4-5 deg low.
+  Python VRTXCO per Newton iteration: ~20 s per SR-3 fixed-pitch scan.
+* `transonic`: lift loss past a lift-divergence Mach number (`Rotor.set_transonic_lift`,
+  per-section MLIFT, `State.mlift`; None = XROTOR). In CLCDCM: M_L = MLIFT - 0.116|CL_PG -
+  CLDMIN|, x = softplus(M - M_L, width 0.02), CL = CL_PG(M - x) - (0.352 x + 1.005 x^2), not
+  past zero; exact derivatives. Fitted to CR-176883's Clark Y bank lift (R&M 2036), t 5-12%:
+  0.027 rms (0.044 above M 0.75; Prandtl-Glauert 0.58); `transonic.mlift(t)` = 1.090 -
+  3.415 t (floor 0.5). The smooth onset matters: a kink at M_L left 11-41 P-47 runs
+  unconverged per propeller. XROTOR's own CL_W leaves out its compressible stall limit's
+  Mach dependence (tests keep that limit away). P-47 (`validation/transonic_lift`): with
+  calibrated drag, the unshifted lift loss loses 0.09-0.12 too much above Mt 1.08; with the
+  same +0.15 on MLIFT, within 0.08. SR-3: barely acts with sweep (normal Mach low); on the
+  straight blade it collapses the power through the thick inboard sections. SR-3's falling
+  fixed-pitch power stays unexplained; blade deflection under load is the next candidate.
 * `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).
   Subtraction underflows within ~1e-8 of r = a and gave NaN.
 

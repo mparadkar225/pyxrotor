@@ -51,6 +51,14 @@ cdef double CLMFACTOR = 0.25
 cdef double MEXP = 3.0
 cdef double CDMDD = 0.0020
 cdef double CDMSTALL = 0.1000
+# transonic lift loss (pyxrotor: not XROTOR), fitted to CR-176883's Clark Y bank (R&M 2036):
+# lift-divergence Mach number M_L = MLIFT - TL_PEN |CL - CLDMIN|; with x = TL_W ln(1 +
+# exp((M - M_L)/TL_W)) (a smooth M - M_L past M_L, ~0 below), the lift is the Prandtl-Glauert
+# lift at M - x less TL_A x + TL_B x^2, not past zero
+cdef double TL_PEN = 0.116
+cdef double TL_A = 0.352
+cdef double TL_B = 1.005
+cdef double TL_W = 0.02
 
 
 ctypedef struct SecAero:
@@ -76,21 +84,23 @@ DEF R_REXP = 11
 DEF R_MCRIT = 12
 
 
-def clcdcm(double alf, double w, double rey, double vel, double vso, sec):
-    """aero.clcdcm (SUBROUTINE CLCDCM); returns the SectionAero fields as a tuple."""
+def clcdcm(double alf, double w, double rey, double vel, double vso, sec, double mlift=0.0):
+    """aero.clcdcm (SUBROUTINE CLCDCM); returns the SectionAero fields as a tuple. mlift > 0
+    adds the transonic lift loss (pyxrotor.transonic; 0 is XROTOR)."""
     cdef double p[13]
     p[R_A0], p[R_CLMAX], p[R_CLMIN] = sec.a0, sec.clmax, sec.clmin
     p[R_DCLDA], p[R_DCLDA_STALL], p[R_DCL_STALL] = sec.dclda, sec.dclda_stall, sec.dcl_stall
     p[R_CDMIN], p[R_CLDMIN], p[R_DCDCL2], p[R_CMCON] = sec.cdmin, sec.cldmin, sec.dcdcl2, sec.cmcon
     p[R_REREF], p[R_REXP], p[R_MCRIT] = sec.reref, sec.rexp, sec.mcrit
-    cdef SecAero r = clcdcm_c(alf, w, rey, vel, vso, p)
+    cdef SecAero r = clcdcm_c(alf, w, rey, vel, vso, p, mlift)
     return (r.clift, r.cl_alf, r.cl_w, r.stallf, r.cdrag, r.cd_alf, r.cd_w, r.cd_rey,
             r.cmom, r.cm_al, r.cm_w, r.clmax, r.clmin, r.mach_limited)
 
 
 cdef SecAero clcdcm_c(double alf, double w, double rey, double vel, double vso,
-                      const double* p) noexcept nogil:
-    """CLCDCM for the parameters p[0..12] (AERODATA(1..13,N) order)."""
+                      const double* p, double mlift) noexcept nogil:
+    """CLCDCM for the parameters p[0..12] (AERODATA(1..13,N) order). mlift > 0: the
+    transonic lift loss of pyxrotor.transonic (not XROTOR); 0 is CLCDCM unchanged."""
     cdef double a0 = p[R_A0], clmax = p[R_CLMAX], clmin = p[R_CLMIN]
     cdef double dclda = p[R_DCLDA], dclda_stall = p[R_DCLDA_STALL], dcl_stall = p[R_DCL_STALL]
     cdef double cdmin = p[R_CDMIN], cldmin = p[R_CLDMIN], dcdcl2 = p[R_DCDCL2], cmcon = p[R_CMCON]
@@ -120,6 +130,8 @@ cdef SecAero clcdcm_c(double alf, double w, double rey, double vel, double vso,
     cla = dclda * pg * (alf - a0)
     cla_alf = dclda * pg
     cla_w = dclda * pg_w * (alf - a0)
+    if mlift > 0.0:
+        lift_loss(&cla, &cla_alf, &cla_w, alf - a0, dclda, cldmin, mach, mach_w, mlift)
 
     dmstall = c_pow(CDMSTALL / CDMFACTOR, 1.0 / MEXP)
     clmaxm = f_fmax(0.0, (mcrit + dmstall - mach) / CLMFACTOR) + cldmin
@@ -187,6 +199,50 @@ cdef SecAero clcdcm_c(double alf, double w, double rey, double vel, double vso,
     out.cmom, out.cm_al, out.cm_w = cmom, cm_al, cm_w
     out.clmax, out.clmin, out.mach_limited = clmax, clmin, mach_limited
     return out
+
+
+cdef void lift_loss(double* cla, double* cla_alf, double* cla_w, double da, double dclda,
+                    double cldmin, double mach, double mach_w, double mlift) noexcept nogil:
+    """Transonic lift loss (pyxrotor.transonic): M_L = MLIFT - TL_PEN |CL - CLDMIN| (the
+    Prandtl-Glauert CL), x = softplus(M - M_L) of width TL_W, lift = Prandtl-Glauert lift at
+    M - x less TL_A x + TL_B x^2. Smooth, with exact derivatives."""
+    cdef double dcl = cla[0] - cldmin, sgd = 1.0 if dcl >= 0.0 else -1.0
+    cdef double ml = mlift - TL_PEN * fabs(dcl), z, x, sig, me, pge, pge_me, cll, loss, dloss, sg
+    cdef double ml_alf, ml_w, x_alf, x_w, me_alf, me_w, cll_alf, cll_w
+    z = (mach - ml) / TL_W
+    if z < -30.0:                                   # far below M_L: x < 1e-15
+        return
+    ml_alf = -TL_PEN * sgd * cla_alf[0]
+    ml_w = -TL_PEN * sgd * cla_w[0]
+    if z > 30.0:
+        x = mach - ml
+        sig = 1.0
+    else:
+        x = TL_W * log1p(c_exp(z))
+        sig = 1.0 / (1.0 + c_exp(-z))
+    x_alf = -sig * ml_alf
+    x_w = sig * (mach_w - ml_w)
+    me = mach - x
+    if me > 0.995:
+        me = 0.995
+    pge = 1.0 / f_sqrt(1.0 - me * me)
+    pge_me = me * pge * pge * pge
+    me_alf = -x_alf
+    me_w = mach_w - x_w
+    cll = dclda * pge * da
+    cll_alf = dclda * pge + dclda * da * pge_me * me_alf
+    cll_w = dclda * da * pge_me * me_w
+    loss = TL_A * x + TL_B * x * x
+    dloss = TL_A + 2.0 * TL_B * x
+    sg = 1.0 if cll >= 0.0 else -1.0
+    if fabs(cll) > loss:
+        cla[0] = cll - sg * loss
+        cla_alf[0] = cll_alf - sg * dloss * x_alf
+        cla_w[0] = cll_w - sg * dloss * x_w
+    else:
+        cla[0] = 0.0
+        cla_alf[0] = 0.0
+        cla_w[0] = 0.0
 
 
 # ------------------------------------------------------------------ GAUSS
@@ -328,7 +384,7 @@ cdef double[:, ::1] memview_zeros2(Py_ssize_t n, Py_ssize_t m):
 # taken as memoryviews (stall through a uint8 view, iaero as int64); its scalars are read
 # once and written back where the Python writes them, so the final State is the same.
 import numpy as np
-from libc.math cimport atan2 as c_atan2, cos as c_cos, sin as c_sin
+from libc.math cimport atan2 as c_atan2, cos as c_cos, sin as c_sin, log1p
 from libc.stdint cimport int64_t
 
 cdef double PI_X = 3.141592654             # pyxrotor.constants.PI (XROTOR.INC's PI)
@@ -408,6 +464,9 @@ cdef struct Ctx:
     bint sweep
     double* sw            # (5, IX): s, s', n, n', BETA' at the stations: [k*ix + i]
     double* coslam        # State.sweep_cos: cos of the effective sweep, set by CSCALC
+    # transonic lift loss (pyxrotor.transonic; not XROTOR): off = CLCDCM unchanged
+    bint liftloss
+    double* mlift         # State.mlift: lift-divergence Mach number per section (NAX)
 
 
 cdef double* ptr(arr) except NULL:
@@ -456,6 +515,12 @@ cdef void load_ctx(Ctx* c, s) except *:
     c.aerodata, c.xiaero = ptr(s.aerodata), ptr(s.xiaero)
     c.ix = s.vind.shape[1]
     c.nax = s.aerodata.shape[1]
+    c.liftloss = s.mlift is not None
+    c.mlift = NULL
+    if c.liftloss:
+        if s.mlift.shape != (c.nax,) or s.mlift.dtype != np.float64 or not s.mlift.flags.c_contiguous:
+            raise TypeError("State.mlift must be C-contiguous float64 of length NAX")
+        c.mlift = ptr(s.mlift)
     c.sweep = s.sweep is not None
     c.coslam = ptr(s.sweep_cos)
     c.sw = NULL
@@ -643,7 +708,7 @@ cdef StaAero getclcdcm_c(Ctx* c, int is_, double alf, double w, double rey) noex
         wn = w * cl
     section_params(c, n, p1)
     xisect1 = c.xiaero[n]
-    r1 = clcdcm_c(alfn, wn, rey, c.vel, c.vso, p1)
+    r1 = clcdcm_c(alfn, wn, rey, c.vel, c.vso, p1, c.mlift[n] if c.liftloss else 0.0)
     if c.sweep:
         r1 = swept_c(r1, p1, cl, dan, rey)
     o.clift, o.cl_alf, o.cl_w, o.stallf = r1.clift, r1.cl_alf, r1.cl_w, r1.stallf
@@ -653,7 +718,7 @@ cdef StaAero getclcdcm_c(Ctx* c, int is_, double alf, double w, double rey) noex
     if n < naero - 1:
         section_params(c, n + 1, p2)
         frac = (xis - xisect1) / (c.xiaero[n + 1] - xisect1)
-        r2 = clcdcm_c(alfn, wn, rey, c.vel, c.vso, p2)
+        r2 = clcdcm_c(alfn, wn, rey, c.vel, c.vso, p2, c.mlift[n + 1] if c.liftloss else 0.0)
         if c.sweep:
             r2 = swept_c(r2, p2, cl, dan, rey)
         o.stallf = o.stallf or r2.stallf

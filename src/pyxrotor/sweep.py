@@ -31,13 +31,21 @@ from its component along W). The derivatives with respect to the angle and W fol
 dependence of L on the velocities is left out of the Newton Jacobian (the residual is
 exact, so the solution is too).
 
-Not modeled (stage 3): the induction of a curved bound vortex and of a wake leaving from
-swept and raked positions, the loss of sweep effectiveness near the root and tip, rake's
-dihedral-like effect on the section, and blade deflection.
+Induction (Rotor.set_sweep(..., induction=True), the default; `vrtxco` below): the vortex
+formulation with XROTOR's discrete helical wake leaving from the swept and raked quarter-chord
+points, and the curved bound vortex's own induction, smoothed within a chord-sized core
+(Sweep.core) so that it converges as the stations are refined.
+
+Not modeled: the other blades' bound vortices (XROTOR leaves them out too), lifting-surface
+(chordwise) effects, the loss of sweep effectiveness near the root and tip beyond what the
+curved line's induction gives, rake's dihedral-like effect on the section, and blade
+deflection.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+import math
 
 import numpy as np
 
@@ -51,6 +59,7 @@ class Sweep:
     xi: np.ndarray
     s: np.ndarray
     n: np.ndarray = field(default=None)
+    core: float = 0.25       # bound-vortex core radius / local chord (vrtxco)
 
     def __post_init__(self):
         self.xi = np.asarray(self.xi, dtype=float)
@@ -106,3 +115,116 @@ def effective_sweep(s) -> np.ndarray:
     """Effective sweep angle (rad) at the stations, from the last CSCALC (arccos of the
     State's sweep_cos)."""
     return np.arccos(np.clip(np.array(s.sweep_cos[: s.ii]), -1.0, 1.0))
+
+
+# ------------------------------------------------------------- induction of a swept blade
+def blade_points(s, r):
+    """Quarter-chord points of blade 1 at radii r (array, units of R) in VRTXCO's frame:
+    x axial (downstream, with XROTOR's RAKE), blade 1 along +y, theta toward +z against the
+    rotation (the way the wake helices turn). Returns (x, theta)."""
+    from .numerics import seval, spline
+    ii = s.ii
+    xi = np.array(s.xi[:ii], dtype=float)
+    be = np.array(s.beta[:ii], dtype=float)
+    bs = spline(be, xi, ii)
+    tanrak = np.tan(float(s.rake))
+    xs, ths = [], []
+    for rv in np.atleast_1d(r):
+        rv = float(rv)
+        b = seval(rv, be, bs, xi, ii)
+        sv, _, nv, _ = s.sweep.at(rv)
+        y = sv * np.cos(b) - nv * np.sin(b)
+        z = sv * np.sin(b) + nv * np.cos(b)
+        xs.append(rv * tanrak + z)
+        ths.append(y / rv)
+    return np.array(xs), np.array(ths)
+
+
+def vrtxco(s) -> None:
+    """VRTXCO for a swept blade (not XROTOR): XROTOR's discrete helical vortex wake, with each
+    trailing leg leaving from its swept and raked quarter-chord point, plus the induction of
+    the blade's own bound vortex, now curved (straight segments between the leg points
+    XV(J), panel J carrying GAM(J)). Velocities are evaluated at each station's point on its
+    panel's bound segment (the curve point at XI(I), projected onto that segment), in the
+    local radial and tangential directions there.
+
+    A curved lifting line's self-induction diverges logarithmically as the panels shrink;
+    a real blade's bound vorticity is spread over its chord, so the bound vortex's induction
+    is smoothed within a core of Sweep.core times the station's chord (default 0.25: the
+    quarter-chord line to the 3/4-chord point is c/2, so a core of c/4 is the middle of
+    the range a chordwise distribution spans). The results depend on it; see
+    tests/model/test_sweep.py and validation/nasa_propfan.
+
+    Kept from VRTXCO: its helix spacing (induced.theta_spacing) and pitch (ADW), the sign
+    conventions, and the omission of the *other* blades' bound vortices. A straight blade
+    (any rigid rotation or axial shift of one) gives XROTOR's coefficients within rounding
+    (tests/model/test_sweep.py)."""
+    from .induced import PI_EXACT, theta_spacing, vorsegvel
+    ii, nblds, adw = s.ii, s.nblds, float(s.adw)
+    if s.duct:
+        raise NotImplementedError("swept-blade induction has no ducted model")
+    s.vind_gam[:, :ii, :ii] = 0.0
+    s.vind_adw[:, :ii] = 0.0
+    thetspc = theta_spacing(adw)
+    xitip = float(s.xv[ii])
+    xv = np.array(s.xv[: ii + 1], dtype=float)
+    x0, th0 = blade_points(s, xv)
+    dtbld = 2.0 * PI_EXACT / float(nblds)
+
+    # trailing legs: (3, NSEG) start/end points per leg J, all blades, in VRTXCO's order
+    r1s, r2s, a1s, a2s = [], [], [], []
+    for j in range(ii + 1):
+        px, py, pz, pa = [], [], [], []
+        for nb in range(nblds):
+            ang = th0[j] + thetspc + nb * dtbld
+            px.append(x0[j] + thetspc * xitip * adw)
+            py.append(xv[j] * np.cos(ang))
+            pz.append(xv[j] * np.sin(ang))
+            pa.append(thetspc * xitip)
+        r1s.append(np.array([np.concatenate([p[:-1] for p in q]) for q in (px, py, pz)]))
+        r2s.append(np.array([np.concatenate([p[1:] for p in q]) for q in (px, py, pz)]))
+        a1s.append(np.concatenate([p[:-1] for p in pa]))
+        a2s.append(np.concatenate([p[1:] for p in pa]))
+    nseg = r1s[0].shape[1]
+    r1 = np.concatenate(r1s, axis=1)
+    r2 = np.concatenate(r2s, axis=1)
+    a1 = np.concatenate(a1s)
+    a2 = np.concatenate(a2s)
+    # bound vortex of blade 1: points at XV(J)
+    pb = np.array([x0, xv * np.cos(th0), xv * np.sin(th0)])
+    # control points
+    xc, thc = blade_points(s, np.array(s.xi[:ii], dtype=float))
+    q = np.array([xc, np.array(s.xi[:ii]) * np.cos(thc), np.array(s.xi[:ii]) * np.sin(thc)])
+
+    gam = np.array(s.gam[:ii], dtype=float)
+    with np.errstate(invalid="ignore", over="ignore", divide="ignore"):
+        for i in range(ii):
+            d = pb[:, i + 1] - pb[:, i]
+            tpar = float(np.clip(np.dot(q[:, i] - pb[:, i], d) / np.dot(d, d), 0.0, 1.0))
+            c = (pb[:, i] + tpar * d)[:, None]
+            th = math.atan2(float(c[2, 0]), float(c[1, 0]))
+            e_r = np.array([0.0, math.cos(th), math.sin(th)])
+            e_t = np.array([0.0, -math.sin(th), math.cos(th)])
+
+            def local(v):                       # (3, ...) -> XROTOR's (axial, radial, -tang)
+                return np.array([v[0], np.tensordot(e_r, v, 1), -np.tensordot(e_t, v, 1)])
+            uvw, ua1, ub1 = vorsegvel(r1 - c, r2 - c, full=False)
+            leg = local(uvw.reshape(3, ii + 1, nseg).sum(axis=2))
+            dadw = local((ua1 * a1 + ub1 * a2).reshape(3, ii + 1, nseg).sum(axis=2))
+            ba, bb = pb[:, :-1] - c, pb[:, 1:] - c
+            bu, _, _ = vorsegvel(ba, bb, full=False)
+            bu[:, i] = 0.0                      # a point on its own segment: no induction
+            # core: the bound vorticity is spread over the chord, so its induction is smoothed
+            # within delta = core x chord of the segment's line, by h^2/(h^2 + delta^2)
+            seg = bb - ba
+            h2 = np.sum(np.cross(ba.T, bb.T) ** 2, axis=1) / np.sum(seg * seg, axis=0)
+            delta = s.sweep.core * float(s.ch[i])
+            bnd = local(np.nan_to_num(bu) * (h2 / (h2 + delta * delta)))
+            for j in range(ii + 1):
+                if j < ii:
+                    s.vind_gam[:, i, j] += -leg[:, j]
+                    s.vind_adw[:, i] -= dadw[:, j] * gam[j]
+                if j > 0:
+                    s.vind_gam[:, i, j - 1] += leg[:, j]
+                    s.vind_adw[:, i] += dadw[:, j] * gam[j - 1]
+            s.vind_gam[:, i, :ii] += bnd

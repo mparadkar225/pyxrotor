@@ -665,13 +665,37 @@ class Rotor:
         from .slipstream import set_profile
         set_profile(self.s, r, u, v, axial_weight, swirl_weight)
 
-    def set_sweep(self, sweep) -> None:
+    def set_transonic_lift(self, mlift=None) -> None:
+        """Transonic lift loss (pyxrotor.transonic; not XROTOR): mlift is each aero section's
+        lift-divergence Mach number at CLDMIN, in section order (transonic.mlift(t) is the
+        Clark Y estimate), or None for XROTOR's Prandtl-Glauert lift."""
+        s = self.s
+        if mlift is None:
+            s.mlift = None
+        else:
+            m = np.zeros(s.aerodata.shape[1])
+            vals = np.asarray(mlift, dtype=float)
+            if vals.size != s.naero:
+                raise ValueError(f"need one MLIFT per aero section ({s.naero})")
+            if np.any(~(vals > 0.0)):
+                raise ValueError("MLIFT must be positive")
+            m[: s.naero] = vals
+            s.mlift = m
+        s.conv = False
+
+    def set_sweep(self, sweep, *, induction: bool = True) -> None:
         """Swept (scimitar) blade: a pyxrotor.sweep.Sweep (quarter-chord offsets along and
         normal to each section's chord), or None for XROTOR's straight blade. Not part of
-        XROTOR: the sections are then evaluated in the plane normal to the quarter-chord
-        line, at the effective sweep of the local flow (see pyxrotor.sweep)."""
+        XROTOR: the sections are evaluated in the plane normal to the quarter-chord line, at
+        the effective sweep of the local flow. induction: also model the curved blade's
+        induced velocities (the swept discrete vortex wake, pyxrotor.sweep.vrtxco); this
+        selects the vortex formulation (OPER FORM VRTX). induction=False keeps the current
+        formulation and treats sweep in the sections only."""
         s = self.s
         s.sweep = sweep
+        s.sweep_induction = bool(induction) and sweep is not None
+        if s.sweep_induction:
+            s.vrtx, s.fast = True, False
         s.sweep_cos = np.ones(s.xi.size)
         s.conv = False
 

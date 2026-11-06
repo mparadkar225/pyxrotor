@@ -201,7 +201,12 @@ def theta_spacing(adw: float) -> np.ndarray:
 
 def vrtxco(s: State) -> None:
     """Port of SUBROUTINE VRTXCO: influence coefficients from a discrete helical vortex
-    wake (one trailing leg from each vortex position XV(J) of each blade)."""
+    wake (one trailing leg from each vortex position XV(J) of each blade). With a swept blade
+    whose induction is on (State.sweep_induction), pyxrotor.sweep.vrtxco instead."""
+    if s.sweep is not None and s.sweep_induction:
+        from .sweep import vrtxco as swept_vrtxco
+        swept_vrtxco(s)
+        return
     ii, nblds, adw = s.ii, s.nblds, s.adw
     blds = float(nblds)
     xitip = float(s.xv[ii])
