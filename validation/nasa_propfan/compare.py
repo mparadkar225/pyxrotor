@@ -29,9 +29,13 @@ SETTINGS = {
     "sweep Mcrit/cos": {"sweep": "mcrit"}, "cosine": {"sweep": "cosine"},
     "cosine+0.10": {"sweep": "cosine", "mcrit_shift": 0.10},
     "cosine+0.15": {"sweep": "cosine", "mcrit_shift": 0.15},
+    "core sweep": {"sweep": "core"}, "core sweep+0.05": {"sweep": "core", "mcrit_shift": 0.05},
+    "core sweep+0.10": {"sweep": "core", "mcrit_shift": 0.10},
+    "core sweep, incompressible": {"sweep": "core", "mach_scale": 0.01},
     "incompressible": {"mach_scale": 0.01},
 }
-SWEEP_ONLY = {"sweep Mcrit/cos", "cosine", "cosine+0.10", "cosine+0.15"}   # = no-sweep on SR-2
+SWEEP_ONLY = {"sweep Mcrit/cos", "cosine", "cosine+0.10", "cosine+0.15", "core sweep",
+              "core sweep+0.05", "core sweep+0.10", "core sweep, incompressible"}  # SR-3 only
 
 
 def settings(prop):

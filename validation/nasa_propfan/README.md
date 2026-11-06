@@ -51,6 +51,12 @@ XROTOR is a straight lifting line with 2-D sections, so it has no sweep. Two que
 - **Sweep options:**
   - `sweep="mcrit"` divides each section's Mcrit by cos(sweep).
   - `sweep="cosine"` also multiplies the lift slope by cos(sweep).
+  - `sweep="core"` uses the compiled core's swept-blade model (`pyxrotor.sweep`). The
+    quarter-chord line is built from the aerodynamic sweep, its planform adjusted until the
+    core's effective sweep at the design point is the published one (within 0.2°). Each
+    station's sweep then follows the local flow at every iteration, and the sections are
+    evaluated in the normal plane: normal Mach number and angle, CL·cos², pressure drag ·cos³.
+    The thickness is taken as the normal section's, t/b / cos(sweep).
 - **Air.** Sea-level total conditions (the open-circuit tunnel draws atmospheric air).
 - **Finding the blade angle.** XROTOR's power solve (POWE) often fails near the local-Mach
   cap, so the blade angle for a given CP is found outside it:
@@ -79,6 +85,8 @@ XROTOR is a straight lifting line with 2-D sections, so it has no sweep. Two que
 | Mcrit + 0.15 | −0.007 | −0.018 | −0.042 | −0.037 | — |
 | Mcrit + 0.20 | −0.007 | −0.016 | — | −0.005 | — |
 | cosine sweep, Mcrit + 0.10 | −0.008 | −0.010 | — | +0.006 | +0.016 |
+| core sweep (`pyxrotor.sweep`) | −0.015 | −0.023 | −0.027 | −0.066 | −0.182 |
+| **core sweep, Mcrit + 0.10** | −0.014 | −0.017 | −0.009 | −0.003 | +0.004 |
 | no compressibility | −0.009 | −0.011 | −0.002 | +0.006 | +0.024 |
 
 - **SR-2, Mcrit + 0.20 follows the measured loss.** It is within 0.025 of its low-speed bias
@@ -113,6 +121,19 @@ XROTOR is a straight lifting line with 2-D sections, so it has no sweep. Two que
 - **Low-speed bias.** At Mach 0.6 the model is +0.015 on SR-2 and −0.012 on SR-3 (figs.
   12–13 means).
 
+- **The core sweep model (stages 1–2 of a sweep model) moves both SR-3 discrepancies the
+  right way, but only part of the way.**
+  - **Efficiency.** With Mcrit + 0.10 the efficiency follows the test within 0.02 of the
+    Mach 0.6 bias to Mach 0.85. Every solve converges, including all 45 points of figure
+    13(e) at Mach 0.8 (16–36 with the straight-blade settings), at −0.011 on average.
+  - **Blade angle.** The deficit at fixed pitch drops from 6.1° to 4.5°: the normal Mach
+    number removes most of the Prandtl-Glauert lift gain, and cos L the lift slope.
+  - **Power at fixed pitch.** From Mach 0.70 to 0.85 CP still rises: +10% against +22% straight,
+    while the test falls 25%.
+  - **What is left.** A sweep-aware strip theory, as Hamilton Standard's was, gets this far.
+    The rest needs the induction of the swept lifting line (a curved bound vortex, the wake
+    leaving from swept and raked positions) and a transonic lift loss.
+
 `tests/measurement/test_propfan.py` pins these findings.
 
 ## Limits
@@ -120,8 +141,9 @@ XROTOR is a straight lifting line with 2-D sections, so it has no sweep. Two que
   ignored. The nacelle velocity is from a potential-flow plot for the M0 = 0.8 case, used at
   every Mach number.
 - The SR-3 diameter variation was read by eye.
-- XROTOR has no sweep: the induction of a swept lifting line, tip relief and transonic lift
-  loss are all missing. The cosine options touch only the section data.
+- XROTOR has no sweep. `sweep="core"` adds it to the sections, from the blade's geometry and
+  the local flow; the induction of a swept lifting line, tip relief and transonic lift loss
+  are still missing. The cosine options touch only the section data.
 - A sweep model would have to reproduce both the blade-angle offset and the fixed-pitch
   unloading with Mach number. Sweep (scimitar) blades at high tip Mach are not predicted by
   this model, beyond efficiency at a given power.

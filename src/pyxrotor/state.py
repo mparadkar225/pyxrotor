@@ -50,8 +50,10 @@ class Fixes:
 class State:
     """All XROTOR COMMON variables, zero-initialized (Fortran COMMON starts zeroed).
 
-    Two attributes are not COMMON: fixes (Fixes, the bug-fix options) and cldes_linear
-    ((root, tip) of the last SETCLD, used by Fixes.linear_cl; None after LOAD)."""
+    Attributes that are not COMMON: fixes (Fixes, the bug-fix options), cldes_linear
+    ((root, tip) of the last SETCLD, used by Fixes.linear_cl; None after LOAD), and the
+    swept-blade model (pyxrotor.sweep, not XROTOR): sweep (a Sweep, or None for XROTOR's
+    straight blade) and sweep_cos (cos of each station's effective sweep, set by CSCALC)."""
 
     #: Fortran variable name -> COMMON block name
     BLOCK_OF = {name: blk for blk, vs in BLOCKS.items() for name, _, _ in vs}
@@ -71,6 +73,8 @@ class State:
             self.iaero[:] = -1                      # Fortran 0 = unset
         self.fixes = Fixes()
         self.cldes_linear: tuple[float, float] | None = None
+        self.sweep = None
+        self.sweep_cos = np.ones(self.xi.size) if hasattr(self, "xi") else np.ones(1)
 
     def copy(self) -> "State":
         return copy.deepcopy(self)

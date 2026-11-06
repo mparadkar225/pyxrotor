@@ -328,7 +328,7 @@ cdef double[:, ::1] memview_zeros2(Py_ssize_t n, Py_ssize_t m):
 # taken as memoryviews (stall through a uint8 view, iaero as int64); its scalars are read
 # once and written back where the Python writes them, so the final State is the same.
 import numpy as np
-from libc.math cimport atan2 as c_atan2, cos as c_cos
+from libc.math cimport atan2 as c_atan2, cos as c_cos, sin as c_sin
 from libc.stdint cimport int64_t
 
 cdef double PI_X = 3.141592654             # pyxrotor.constants.PI (XROTOR.INC's PI)
@@ -404,6 +404,10 @@ cdef struct Ctx:
     double* aerodata      # AERODATA(14, NAX): [row*nax + n]
     double* xiaero
     int ix, nax
+    # swept-blade model (pyxrotor.sweep; not XROTOR): off = XROTOR's straight blade
+    bint sweep
+    double* sw            # (5, IX): s, s', n, n', BETA' at the stations: [k*ix + i]
+    double* coslam        # State.sweep_cos: cos of the effective sweep, set by CSCALC
 
 
 cdef double* ptr(arr) except NULL:
@@ -452,6 +456,15 @@ cdef void load_ctx(Ctx* c, s) except *:
     c.aerodata, c.xiaero = ptr(s.aerodata), ptr(s.xiaero)
     c.ix = s.vind.shape[1]
     c.nax = s.aerodata.shape[1]
+    c.sweep = s.sweep is not None
+    c.coslam = ptr(s.sweep_cos)
+    c.sw = NULL
+    if c.sweep:
+        from .sweep import station_arrays
+        if s.sweep_cos.size != c.ix or s.sweep_cos.dtype != np.float64:
+            raise TypeError("State.sweep_cos must be float64 of length IX")
+        s._sweep_sta = station_arrays(s)            # kept alive on the State
+        c.sw = ptr(s._sweep_sta)
 
 
 cdef inline double VG(Ctx* c, int k, int i, int j) noexcept nogil:
@@ -512,7 +525,58 @@ cdef Vel cscalc_c(Ctx* c, int i) noexcept nogil:
     v.p_adv = -(v.si * v.ci_adv) / wsq
     v.p_vt = -(v.si * v.ci_vt) / wsq
     v.p_va = v.ci * v.si_va / wsq
+    if c.sweep:
+        c.coslam[i] = sweep_cos_c(c, i, v.ci, v.si, v.w)
     return v
+
+
+cdef double sweep_cos_c(Ctx* c, int i, double ci, double si, double w) noexcept nogil:
+    """cos of the effective sweep at station i (pyxrotor.sweep): the quarter-chord line's
+    tangent T against the relative velocity (0, CI, SI)."""
+    cdef int ix = c.ix
+    cdef double sv = c.sw[i], sp = c.sw[ix + i], nv = c.sw[2 * ix + i]
+    cdef double np_ = c.sw[3 * ix + i], bp = c.sw[4 * ix + i]
+    cdef double b = c.beta[i], cb = c_cos(b), sb = c_sin(b), xi = c.xi[i]
+    cdef double y = sv * cb - nv * sb
+    cdef double yp = sp * cb - sv * sb * bp - np_ * sb - nv * cb * bp
+    cdef double zp = sp * sb + sv * cb * bp + np_ * cb - nv * sb * bp
+    cdef double tt = yp - y / xi, tn
+    cdef double sinl
+    tn = c_sqrt(1.0 + tt * tt + zp * zp)
+    sinl = (tt * ci + zp * si) / (tn * w)
+    if not (sinl * sinl < 1.0):                    # non-finite or degenerate: no sweep
+        return 1.0
+    return c_sqrt(1.0 - sinl * sinl)
+
+
+cdef SecAero swept_c(SecAero r, const double* p, double cl, double dan, double rey) noexcept nogil:
+    """Simple sweep (pyxrotor.sweep): r is CLCDCM in the normal plane (at the normal angle
+    and Mach number); returns streamwise coefficients CL = CLn cos^2, CD = CDf + (CDn - CDf)
+    cos^3 (CDf = the friction part CDMIN (Re/REREF)^REXP), derivatives with respect to the
+    streamwise angle (dan = d an / d a) and W."""
+    cdef double c2 = cl * cl, c3 = c2 * cl, rc, rc_rey, cdf, cdf_rey
+    cdef SecAero o = r
+    if rey <= 0:
+        rc = 1.0
+        rc_rey = 0.0
+    else:
+        rc = c_pow(rey / p[R_REREF], p[R_REXP])
+        rc_rey = p[R_REXP] / rey
+    cdf = p[R_CDMIN] * rc
+    cdf_rey = cdf * rc_rey
+    o.clift = r.clift * c2
+    o.cl_alf = r.cl_alf * dan * c2
+    o.cl_w = r.cl_w * cl * c2
+    o.clmax = r.clmax * c2
+    o.clmin = r.clmin * c2
+    o.cdrag = cdf + (r.cdrag - cdf) * c3
+    o.cd_alf = r.cd_alf * dan * c3
+    o.cd_w = r.cd_w * cl * c3
+    o.cd_rey = cdf_rey + (r.cd_rey - cdf_rey) * c3
+    o.cmom = r.cmom * c2
+    o.cm_al = r.cm_al * dan * c2
+    o.cm_w = r.cm_w * cl * c2
+    return o
 
 
 def cscalc(s, int i):
@@ -568,24 +632,37 @@ cdef StaAero getclcdcm_c(Ctx* c, int is_, double alf, double w, double rey) noex
         if not jumped:
             n = 0
             c.iaero[is_] = n
+    # swept blade (pyxrotor.sweep): the sections are evaluated in the normal plane
+    cdef double cl = 1.0, dan = 1.0, alfn = alf, wn = w, ca, sa
+    if c.sweep:
+        cl = c.coslam[is_]
+        ca = c_cos(alf)
+        sa = c_sin(alf)
+        alfn = c_atan2(sa, ca * cl)
+        dan = cl / (cl * cl * ca * ca + sa * sa)
+        wn = w * cl
     section_params(c, n, p1)
     xisect1 = c.xiaero[n]
-    r1 = clcdcm_c(alf, w, rey, c.vel, c.vso, p1)
+    r1 = clcdcm_c(alfn, wn, rey, c.vel, c.vso, p1)
+    if c.sweep:
+        r1 = swept_c(r1, p1, cl, dan, rey)
     o.clift, o.cl_alf, o.cl_w, o.stallf = r1.clift, r1.cl_alf, r1.cl_w, r1.stallf
     o.cdrag, o.cd_alf, o.cd_w, o.cd_rey = r1.cdrag, r1.cd_alf, r1.cd_w, r1.cd_rey
     o.cmom, o.cm_al, o.cm_w = r1.cmom, r1.cm_al, r1.cm_w
-    o.clmax, o.clmin, o.dcl_stall = r1.clmax, r1.clmin, p1[R_DCL_STALL]
+    o.clmax, o.clmin, o.dcl_stall = r1.clmax, r1.clmin, p1[R_DCL_STALL] * (cl * cl)
     if n < naero - 1:
         section_params(c, n + 1, p2)
         frac = (xis - xisect1) / (c.xiaero[n + 1] - xisect1)
-        r2 = clcdcm_c(alf, w, rey, c.vel, c.vso, p2)
+        r2 = clcdcm_c(alfn, wn, rey, c.vel, c.vso, p2)
+        if c.sweep:
+            r2 = swept_c(r2, p2, cl, dan, rey)
         o.stallf = o.stallf or r2.stallf
         o.clift = (1.0 - frac) * o.clift + frac * r2.clift
         o.cl_alf = (1.0 - frac) * o.cl_alf + frac * r2.cl_alf
         o.cl_w = (1.0 - frac) * o.cl_w + frac * r2.cl_w
         o.clmax = (1.0 - frac) * o.clmax + frac * r2.clmax
         o.clmin = (1.0 - frac) * o.clmin + frac * r2.clmin
-        o.dcl_stall = (1.0 - frac) * o.dcl_stall + frac * p2[R_DCL_STALL]
+        o.dcl_stall = (1.0 - frac) * o.dcl_stall + frac * (p2[R_DCL_STALL] * (cl * cl))
         o.cmom = (1.0 - frac) * o.cmom + frac * r2.cmom
         o.cm_al = (1.0 - frac) * o.cm_al + frac * r2.cm_al
         o.cm_w = (1.0 - frac) * o.cm_w + frac * r2.cm_w

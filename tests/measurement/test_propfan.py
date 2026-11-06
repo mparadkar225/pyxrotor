@@ -101,3 +101,49 @@ def test_sr3_fixed_pitch_power_rises_where_the_test_falls():
             assert o["usable"], (kw, M)
             assert o["CP"] / cp70 > 1.14, (kw, M, o["CP"] / cp70)
     assert 1.49 / 1.64 < 0.92 and 1.23 / 1.64 < 0.76
+
+
+SR3_TABLE_I = {0.6: 0.802, 0.7: 0.805, 0.8: 0.788, 0.85: 0.770}
+
+
+def test_sr3_core_sweep_effective_sweep_is_the_published():
+    """The calibrated quarter-chord line gives the core the published aerodynamic sweep at
+    the design point, within 0.5 deg."""
+    g = model.GEO["SR-3"]
+    o = model.run("SR-3", 0.8, 3.06, cp=1.695, sweep="core", mach_scale=0.01)
+    r = o["rotor"]
+    x = np.array(r.s.xi[: r.s.ii])
+    want = np.abs(np.interp(x, g["r_over_R"], g["sweep_deg"]))
+    assert np.max(np.abs(r.effective_sweep_deg() - want)) < 0.5
+
+
+def test_sr3_core_sweep_design_point():
+    """With the core's sweep model (pyxrotor.sweep) and Mcrit + 0.10 every design-point solve
+    converges, and the efficiency follows the test's within 0.02 of the Mach 0.6 bias to
+    Mach 0.85; without a shift it loses 0.2 too much at 0.85."""
+    e10 = {M: model.run("SR-3", M, 3.06, cp=1.695, sweep="core", mcrit_shift=0.10)
+           for M in SR3_TABLE_I}
+    assert all(o["usable"] for o in e10.values())
+    bias = e10[0.6]["eta"] - SR3_TABLE_I[0.6]
+    for M, t in SR3_TABLE_I.items():
+        assert abs(e10[M]["eta"] - t - bias) < 0.02, M
+    e0 = model.run("SR-3", 0.85, 3.06, cp=1.695, sweep="core")
+    assert e0["eta"] - SR3_TABLE_I[0.85] - bias < -0.15
+
+
+def test_sr3_core_sweep_moves_both_discrepancies_part_way():
+    """Stages 1-2 of the sweep model (section-level sweep from the blade's geometry) move the
+    blade angle and the fixed-pitch Mach trend the right way, not all the way: the blade angle
+    at the test's CP is still 4-5 deg low (6 deg straight), and at fixed pitch CP still rises
+    6-14% from Mach 0.70 to 0.85 (straight: 22%; test: falls 25%). What is left needs the
+    induction of the swept lifting line and a transonic lift loss."""
+    out = {}
+    for name, kw in (("straight", {"mcrit_shift": 0.15}),
+                     ("core", {"sweep": "core", "mcrit_shift": 0.10})):
+        ref = model.run("SR-3", 0.70, 3.1, cp=1.64, **kw)
+        b = ref["beta75"]
+        c70 = model.run("SR-3", 0.70, 3.1, beta75=b, **kw)["CP"]
+        c85 = model.run("SR-3", 0.85, 3.1, beta75=b, **kw)["CP"]
+        out[name] = (b - 60.5, c85 / c70)
+    assert -5.0 < out["core"][0] < -4.0 and out["straight"][0] < -5.5
+    assert 1.05 < out["core"][1] < 1.15 and out["straight"][1] > 1.18

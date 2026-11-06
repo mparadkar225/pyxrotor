@@ -350,6 +350,26 @@ never only by its own derivation. Keep XROTOR's conventions and quantities where
   propeller-level correction (tip relief, the cubic drag law, the compressible stall
   limit), not a section-estimate error. The 16-series bank raises L51L28 static power 6-14%.
   OUT's interval search loops forever on NaN (Fortran too), so test with finite inputs.
+* `sweep`: swept (scimitar) blades in the compiled core, stages 1-2 (geometry, section-level
+  sweep). `Rotor.set_sweep(Sweep(xi, s, n))`: quarter-chord offsets (units of R) along and
+  normal to each section's chord, so they turn with pitch changes. CSCALC sets
+  `State.sweep_cos` from the curve's tangent T = (1, y' - y/xi, z') (y the tangential arc
+  offset, z axial, BETA' from the twist) against W = (0, CI, SI); GETCLCDCM evaluates each
+  section at tan(an) = tan(a)/cos L and Mach M cos L and returns CL = CLn cos^2 and
+  CD = CDf + (CDn - CDf) cos^3 (CDf = CDMIN (Re/REREF)^REXP, friction). Sections are the
+  normal ones; CH and BETA stay cylindrical. With `State.sweep = None` nothing in the core
+  changes (differential suite bitwise); a zero-offset Sweep is equal within rounding only
+  (atan2 and the CD split). L's dependence on the velocities is not in the Jacobian. DESI
+  refuses a swept blade (its sections are evaluated in Python). Not saved in restart files.
+  Checks (`tests/model/test_sweep.py`): L against a numerically differentiated 3-D curve on
+  a twisted, leaned blade; the normal-plane identities; dCL/da x cos L. On a strongly twisted
+  blade the effective sweep is well below the planform angle (offsets turn with the chord).
+  SR-3 (`validation/nasa_propfan`, sweep="core", line calibrated so the design-point
+  effective sweep is the published one): with Mcrit + 0.10 every design-point solve
+  converges and efficiency follows within 0.02 to Mach 0.85; the blade-angle deficit drops
+  from 6 to 4.5 deg and the fixed-pitch CP rise from Mach 0.70 to 0.85 from +22% to +10%
+  (test: -25%). The rest needs stage 3: the swept lifting line's induction (curved bound
+  vortex, wake from swept/raked positions; extend VRTXCO) and a transonic lift loss.
 * `cylinder_velocity` on a sheet: form 1 - k0^2 as ((a-r)/(a+r))^2 (`_scaled_pi`).
   Subtraction underflows within ~1e-8 of r = a and gave NaN.
 

@@ -26,6 +26,11 @@ Model choices (each is an option to run with and without):
     Standard's strip method applied the cosine rule to the airfoil data and the local
     velocity). XROTOR's Prandtl-Glauert factor still uses the full Mach number, and the
     zero-lift angle and CLmax are left as they are.
+  * sweep="core": the compiled core's swept-blade model (pyxrotor.sweep): the quarter-chord
+    line from the aerodynamic sweep (s' = tan sweep), each station's effective sweep from the
+    local flow at every iteration, sections evaluated in the normal plane (normal Mach number
+    and angle, CL cos^2, pressure drag cos^3). The airfoil thickness is taken as the normal
+    section's, t/b / cos(sweep).
   * nacelle=True: XROTOR's body velocity UBODY = M_local/M0 - 1 from the potential-flow
     axial Mach number about the 0.35 D nacelle at M0 = 0.8 (TM X-73612 fig. 11), the same
     fraction at every Mach number.
@@ -46,6 +51,7 @@ from pathlib import Path
 import numpy as np
 
 from pyxrotor.constants import PI
+from pyxrotor.sweep import Sweep
 from pyxrotor.sections import naca16
 from pyxrotor.rotor import Rotor
 
@@ -73,6 +79,8 @@ def sections(prop: str, mcrit_shift: float = 0.0, sweep: str | None = None):
               0.85, 0.90, 0.95, 1.0]:
         t = float(np.interp(x, r, g["h_over_b"]))
         cld = float(np.interp(x, r, g["design_cl"]))
+        if sweep == "core":                      # the airfoil normal to the swept line
+            t = t / math.cos(math.radians(float(np.interp(x, r, g["sweep_deg"]))))
         s = section16(t, float(x), cld, mcrit_shift)
         if sweep in ("mcrit", "cosine"):
             lam = math.radians(float(np.interp(x, r, g["sweep_deg"])))
@@ -81,6 +89,35 @@ def sections(prop: str, mcrit_shift: float = 0.0, sweep: str | None = None):
                 s.dclda = s.dclda * math.cos(lam)        # simple-sweep lift slope
         out.append(s)
     return out
+
+
+_SWEEP = {}
+
+
+def blade_sweep(prop: str):
+    """The swept quarter-chord line (pyxrotor.sweep) for sweep="core": offsets along the
+    chord, crossing the pitch axis where the sweep changes sign (0.39R on SR-3). The
+    planform angle is adjusted (3 passes) until the core's effective sweep at the design
+    point (Mach 0.8, J 3.06, CP 1.695, solved without compressibility) is the published
+    aerodynamic sweep: the arc of the tangential offset and the twist make the two differ
+    by up to 5 deg."""
+    if prop in _SWEEP:
+        return _SWEEP[prop]
+    g = GEO[prop]
+    xi = np.array(g["r_over_R"], dtype=float)
+    target = np.array(g["sweep_deg"], dtype=float)
+    plan = target.copy()
+    sw = Sweep.from_angle(xi, plan)
+    for _ in range(3):
+        _SWEEP[prop] = sw
+        o = _solve(prop, 0.8, 3.06, 1.695, 58.0, 0.0, "core", True, 0.01)
+        r = o["rotor"]
+        eff = np.interp(xi, r.s.xi[:r.s.ii], r.effective_sweep_deg()
+                        * np.sign(np.interp(r.s.xi[:r.s.ii], xi, target)))
+        plan = plan + (target - eff)
+        sw = Sweep.from_angle(xi, plan)
+    _SWEEP[prop] = sw
+    return sw
 
 
 def blade(prop: str, beta75: float):
@@ -116,6 +153,8 @@ def _solve(prop, M, J, cp, beta, mcrit_shift, sweep, nacelle, mach_scale, nitera
     rr[0] = (rr[0] * R) / R                         # ARBI's XI0 = (hub R)/R, to the ulp
     r.arbi(nblds=g["nblds"], vel=vel, tip_radius=R, hub_radius=rr[0] * R,
            r_over_R=rr, c_over_R=cc, beta_deg=bb)
+    if sweep == "core":
+        r.set_sweep(blade_sweep(prop))
     if nacelle:
         nac = GEO["nacelle_local_axial_mach_M0_0.8"]
         r.s.ubody[:r.s.ii] = np.interp(r.s.xi[:r.s.ii], nac["r_over_R"], nac["M_local"]) / 0.8 - 1.0

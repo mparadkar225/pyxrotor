@@ -369,6 +369,10 @@ class Rotor:
         windmill limits and betz_ok is False; ValueError where DESGEN rejects the inputs.
         """
         s = self.s
+        if s.sweep is not None:
+            raise NotImplementedError("DESI designs a straight blade (its sections are "
+                                      "evaluated without the sweep model): set_sweep(None) "
+                                      "first, then set the sweep for analysis")
         s.nblds = int(nblds)
         s.raddes, s.r0des, s.rwdes = float(tip_radius), float(hub_radius), float(wake_hub_radius)
         s.veldes = float(vel)
@@ -407,6 +411,10 @@ class Rotor:
             cl_root_tip=(root, tip) (CL: linear in r/R on the *current* grid, as in 7.55).
         """
         s = self.s
+        if s.sweep is not None:
+            raise NotImplementedError("DESI designs a straight blade (its sections are "
+                                      "evaluated without the sweep model): set_sweep(None) "
+                                      "first, then set the sweep for analysis")
         for key, value in changes.items():
             if key == "nblds":
                 s.nblds = int(value)
@@ -656,6 +664,21 @@ class Rotor:
         """VGET from arrays (e.g. another Rotor's slipstream_profile())."""
         from .slipstream import set_profile
         set_profile(self.s, r, u, v, axial_weight, swirl_weight)
+
+    def set_sweep(self, sweep) -> None:
+        """Swept (scimitar) blade: a pyxrotor.sweep.Sweep (quarter-chord offsets along and
+        normal to each section's chord), or None for XROTOR's straight blade. Not part of
+        XROTOR: the sections are then evaluated in the plane normal to the quarter-chord
+        line, at the effective sweep of the local flow (see pyxrotor.sweep)."""
+        s = self.s
+        s.sweep = sweep
+        s.sweep_cos = np.ones(s.xi.size)
+        s.conv = False
+
+    def effective_sweep_deg(self) -> np.ndarray:
+        """Effective sweep (deg) at the stations from the last solution (0 if straight)."""
+        from .sweep import effective_sweep
+        return np.degrees(effective_sweep(self.s))
 
     def clear_slipstream(self) -> None:
         """Remove the imposed slipstream (NADD = 0)."""
